@@ -170,6 +170,7 @@ export async function liveFactsBlock(
 ): Promise<string> {
   // سقف صارم: مهما تعثّرت المصادر أو تباطأت المرايا، الرد على المستخدم لا يتأخر.
   // ومع ذلك لا نرجع فارغين: ما وصل من أرقام رسمية قبل انتهاء المهلة يُسلَّم كما هو.
+  console.error("[snap] liveFactsBlock enter");
   const { withBudget } = await import("./net-resilience.server");
   const snap = await import("./live-snapshot.server");
   const key = snap.snapshotKey(intentOf(message) as unknown as Record<string, boolean>, {
