@@ -172,7 +172,7 @@ export async function liveFactsBlock(
   // ومع ذلك لا نرجع فارغين: ما وصل من أرقام رسمية قبل انتهاء المهلة يُسلَّم كما هو.
   console.error("[snap] liveFactsBlock enter");
   const { withBudget } = await import("./net-resilience.server");
-  const snap = await import("./live-snapshot.server");
+  const snap = await import("./live-snapshot.server").catch((e) => { console.error("[snap] import fail", String(e)); throw e; });
   const key = snap.snapshotKey(intentOf(message) as unknown as Record<string, boolean>, {
     country: (opts.country ?? "EG").toUpperCase(),
     city: opts.city ?? null,
