@@ -438,7 +438,6 @@ export async function runEmployeeTurn(
           }).catch(() => "")
         : Promise.resolve(""),
     ]);
-    emit({ type: "step", label: `DBG ${liveBlock.slice(0, 500).replace(/\n/g, " | ")}` });
 
     // المنصة التي سمّاها المستخدم بنفسه — تُحترم حرفياً ولا تُبدَّل بغيرها.
     const { requestedPublishTargets, providerLabel } = await import("./platforms");
@@ -562,7 +561,6 @@ export async function runEmployeeTurn(
       `تعمل داخل منصة «سهل» لصالح العلامة: ${workspace.name} (${workspace.industry}).`,
       `نبرة العلامة: ${workspace.tone}.`,
       nowBlock(timezone, ws.country),
-      liveBlock,
       intentBlock(intent),
       coworkerVoiceBlock({
         employeeId: data.employeeId,
@@ -599,6 +597,10 @@ export async function runEmployeeTurn(
       brainText ? `## عقل العلامة (ذاكرة مشتركة بين الفريق)\n${brainText}` : "",
       teamActivity ? `## آخر ما أنجزه الفريق\n${teamActivity}` : "",
       research.block ? `${evidenceRules}\n\n## أدلة ميدانية (لحظية)\n${research.block}` : "",
+      // الحقائق اللحظية آخر ما يقرأه النموذج قبل الكتابة: أعلى أولوية وتتقدّم على أي قاعدة تحفّظ.
+      liveBlock
+        ? `${liveBlock}\n\nهذه الكتلة أعلى سلطة في الرد: أي رقم أو تاريخ فيها مؤكد ورسمي، اذكره كما هو بالحرف. ممنوع قول «لا يوجد رقم مؤكد» عن رقم مذكور هنا.`
+        : "",
       actionTruthRules,
       askedBlock,
       toolsBlock,
