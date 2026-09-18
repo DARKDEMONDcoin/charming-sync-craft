@@ -286,10 +286,19 @@ async function liveFactsInner(
   if (intent.crypto) structuredTasks.push(settled(extra.cryptoAny(undefined, { ms: searchMs }), ""));
   if (intent.prayer)
     structuredTasks.push(settled(extra.prayerAny(city, place.country, { ms: searchMs }), ""));
+  const world = await import("./live-sources-world.server");
   if (intent.sports) {
     const team = teamNameIn(message);
     if (team) structuredTasks.push(settled(sources.teamMatches(team, { ms: searchMs }), ""));
+    structuredTasks.push(settled(world.espnScores(undefined, { ms: searchMs }), ""));
   }
+  // إجازات ومناسبات رسمية: تفيد كل موظف في التوقيت والحملات.
+  if (/إجازة|أجازة|عطلة|عيد|مناسبة|holiday|يوم وطني/u.test(message))
+    structuredTasks.push(settled(world.publicHolidays(code, { ms: searchMs }), ""));
+  if (/زلزال|زلازل|هزة|earthquake/u.test(message))
+    structuredTasks.push(settled(world.earthquakes({ ms: searchMs }), ""));
+  if (/من هو|من هي|ما هي|تعريف|شركة|مؤسس|رئيس|who is/u.test(message))
+    structuredTasks.push(settled(world.wikidataFact(q, { ms: searchMs }), ""));
 
   // الأرقام الرسمية تصل عادة قبل نتائج البحث: نسجّلها فوراً كنسخة احتياطية جاهزة.
   const structuredP = Promise.all(structuredTasks).then((list) => {
