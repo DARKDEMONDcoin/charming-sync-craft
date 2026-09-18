@@ -316,8 +316,11 @@ export async function ambientPulse(
 ): Promise<string> {
   const code = (opts.country ?? "EG").toUpperCase();
   const sources = await import("./live-sources.server");
+  const extra = await import("./live-sources-extra.server");
   const tasks: Promise<LiveRow[]>[] = [
     settled(sources.googleNewsTop({ country: code, ms: budgetMs }), []),
+    // بديل مباشر بلا محرك بحث، يعمل حتى لو سقطت أخبار جوجل.
+    settled(extra.arabicFeeds({ ms: budgetMs, limit: 12 }), []),
     ...(opts.topics ?? [])
       .slice(0, 2)
       .map((t) => settled(sources.googleNewsSearch(t, { country: code, ms: budgetMs }), [])),
