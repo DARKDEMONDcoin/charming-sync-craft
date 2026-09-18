@@ -64,7 +64,37 @@ export type ChatOptions = {
   race?: boolean;
   /** الميزانية الزمنية الإجمالية لكل المزوّدات (افتراضياً 120 ثانية أو ضعف مهلة النموذج). */
   budgetMs?: number;
+  /** المنطقة الزمنية للعلامة — تضبط «اللحظة الآن» المحقونة في كل نداء. */
+  timeZone?: string;
+  /** تعطيل حقن مرساة الزمن (لا يُستخدم عملياً — النماذج بلا ساعة). */
+  noTimeAnchor?: boolean;
 };
+
+/**
+ * مرساة الزمن: كل نداء نموذج في المنصة — مهما كان مصدره (شات، أوتوبايلوت، بريفنج،
+ * واتساب، قرارات، جدولة) — يخرج ومعه اللحظة الحالية محسوبةً على الخادم. النماذج لا
+ * تملك ساعة، وبدون هذا السطر تخمّن التاريخ من بيانات تدريبها وتخطئ دائماً.
+ */
+function withNowAnchor(
+  messages: { role: string; content: string }[],
+  options: ChatOptions,
+): { role: string; content: string }[] {
+  if (options.noTimeAnchor) return messages;
+  let anchor = "";
+  try {
+    // استيراد متزامن غير ممكن هنا، لذا نحسب السطر محلياً عبر الوحدة المحمّلة مسبقاً.
+    anchor = nowAnchorLineSync(options.timeZone ?? "Asia/Riyadh");
+  } catch {
+    return messages;
+  }
+  if (!anchor) return messages;
+  const index = messages.findIndex((m) => m.role === "system");
+  if (index === -1) return [{ role: "system", content: anchor }, ...messages];
+  if (messages[index]!.content.includes("اللحظة الآن")) return messages;
+  return messages.map((m, i) =>
+    i === index ? { ...m, content: `${anchor}\n\n${m.content}` } : m,
+  );
+}
 
 /** خطأ حد الاستخدام اليومي المجاني على مستوى الحساب — لا فائدة من تجربة نماذج أخرى. */
 export class DailyFreeLimitError extends Error {
