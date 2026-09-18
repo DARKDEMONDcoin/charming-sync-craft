@@ -197,6 +197,16 @@ export async function liveFactsBlock(
       settled(sources.gdeltNews(q, { ms: searchMs }), []),
     );
   if (intent.tech) webTasks.push(settled(sources.hackerNewsSearch(q, { ms: searchMs }), []));
+  // بدائل دائمة تعمل بالتوازي: لو حُجب محرك أو سقط مزوّد يبقى هناك من يجيب.
+  webTasks.push(
+    settled(
+      (async () => {
+        const extra = await import("./live-sources-extra.server");
+        return extra.backupWebSearch(q, { ms: searchMs });
+      })(),
+      [],
+    ),
+  );
 
   // 2) مصادر منظّمة حسب النيّة — إجابات قاطعة بأرقام حقيقية.
   const structuredTasks: Promise<string>[] = [];
