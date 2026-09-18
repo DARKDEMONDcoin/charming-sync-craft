@@ -53,12 +53,12 @@ function relevantRows(rows: LiveRow[], query: string): LiveRow[] {
     .split(/[^\p{L}\p{N}]+/u)
     .filter((t) => t.length >= 3 && !STOP.has(t));
   if (!tokens.length) return rows;
-  const hit = rows.filter((r) => {
+  // تصفية صارمة: نتائج البحث العام ترجع ضجيجاً كثيراً (صفحات دعم، إعلانات) ولا
+  // شيء أسوأ من حقيقة «لحظية» بلا علاقة بالسؤال.
+  return rows.filter((r) => {
     const hay = norm(`${r.title} ${r.snippet}`);
     return tokens.some((t) => hay.includes(t));
   });
-  // لو التصفية أفرغت كل شيء، النتائج الخام أفضل من لا شيء (خاصة أخبار العناوين القصيرة).
-  return hit.length ? hit : rows.slice(0, 5);
 }
 
 /** نيّة السؤال — تحدّد أي مصادر منظّمة نستدعي بجانب البحث العام. */
@@ -206,7 +206,9 @@ export async function liveFactsBlock(
     Promise.all(structuredTasks),
   ]);
 
-  const rows = webResults.flatMap((r) => relevantRows(r, q).slice(0, 6));
+  let rows = webResults.flatMap((r) => relevantRows(r, q).slice(0, 6));
+  // لو أسقطت التصفية كل شيء، نأخذ أفضل ما جاءت به مصادر الأخبار الخام (الأحدث زمنياً).
+  if (!rows.length) rows = webResults.flatMap((r) => r.filter((x) => x.date).slice(0, 4));
   const seen = new Set<string>();
   const unique = rows
     .filter((r) => r.url && r.title && !seen.has(r.url) && seen.add(r.url))
