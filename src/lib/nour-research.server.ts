@@ -83,7 +83,7 @@ function withNowAnchor(
   let anchor = "";
   try {
     // استيراد متزامن غير ممكن هنا، لذا نحسب السطر محلياً عبر الوحدة المحمّلة مسبقاً.
-    anchor = nowAnchorLineSync(options.timeZone ?? "Asia/Riyadh");
+    anchor = nowAnchorLine(options.timeZone ?? "Asia/Riyadh");
   } catch {
     return messages;
   }
