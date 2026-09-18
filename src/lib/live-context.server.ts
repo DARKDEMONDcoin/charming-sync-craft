@@ -157,7 +157,7 @@ export async function liveFactsBlock(
   const left = () => budgetMs - (Date.now() - started);
   const intent = intentOf(message);
   const code = (opts.country ?? "EG").toUpperCase();
-  const place = COUNTRY_CITY[code] ?? COUNTRY_CITY.EG!;
+  const place = COUNTRY_CITY[code] ?? COUNTRY_CITY["EG"]!;
   const city = opts.city?.trim() || place.city;
 
   const sources = await import("./live-sources.server");
