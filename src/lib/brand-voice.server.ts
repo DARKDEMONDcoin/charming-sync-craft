@@ -8,7 +8,7 @@
 import { parseHTML } from "linkedom";
 
 import { normalizeArabic } from "./memory.server";
-import { extractArticle } from "./readability.server";
+import { blockAwareText, extractArticle } from "./readability.server";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36 SahlBot/1.0";
@@ -139,15 +139,11 @@ function metaTexts(html: string): { title: string; description: string; headings
 }
 
 function fallbackText(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<nav[\s\S]*?<\/nav>/gi, " ")
-    .replace(/<footer[\s\S]*?<\/footer>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return blockAwareText(
+    html
+      .replace(/<nav[\s\S]*?<\/nav>/gi, " ")
+      .replace(/<footer[\s\S]*?<\/footer>/gi, " "),
+  );
 }
 
 /**
@@ -332,11 +328,18 @@ const STOP = new Set(
   ),
 );
 
+/** كلمات القوائم والفوتر التي تلوّث «المفردات المميزة» للعلامة. */
+const BOILERPLATE =
+  /^(مواعيد|العمل|العمليوميا|الرئيسيه|الصفحه|سياسه|الخصوصيه|الشروط|الاحكام|حقوق|محفوظه|تسجيل|الدخول|قائمه|التنقل|ملفات|الكوكيز|الاسئله|الشائعه|اتصل|بنا|عنا|جميع|ارسال|الاشتراك|النشره|السبت|الاحد|الاثنين|الثلاثاء|الاربعاء|الخميس|الجمعه|صباحا|مساء|الهاتف|الفاكس|البريد|العنوان)$/;
+
 export function analyzeStyle(text: string, taglines: string[] = []): StyleStats {
-  const raw = text.replace(/\s+/g, " ").trim();
+  // نحافظ على أسطر الفقرات لأنها حدود جُمل حقيقية في صفحات الويب العربية
+  const body = text.replace(/[ \t\u00a0]+/g, " ").trim();
+  const raw = body.replace(/\s+/g, " ").trim();
   const words = raw.split(" ").filter(Boolean);
-  const sentences = raw
-    .split(/(?<=[.!؟?…])\s+|\n+/)
+  const sentences = body
+    .split(/(?<=[.!؟?…؛])\s+|\n+/)
+    .flatMap((s) => (s.split(" ").length > 40 ? s.split(/،\s*/) : [s]))
     .map((s) => s.trim())
     .filter((s) => s.split(" ").length >= 2);
   const lens = sentences.map((s) => s.split(" ").length);
@@ -358,7 +361,8 @@ export function analyzeStyle(text: string, taglines: string[] = []): StyleStats 
   const second = dialectScores[1]!;
   const total = dialectScores.reduce((a, b) => a + b.score, 0) || 1;
   let dialect: StyleStats["dialect"] = top.score === 0 ? "msa" : top.d;
-  const conf = top.score / total;
+  // غياب أي مؤشر عامية دليل معقول على الفصحى، فلا تكون الثقة صفراً
+  const conf = top.score === 0 ? 0.6 : top.score / total;
   if (
     top.d !== "msa" &&
     second.d !== "msa" &&
@@ -389,7 +393,14 @@ export function analyzeStyle(text: string, taglines: string[] = []): StyleStats 
   const freq = new Map<string, number>();
   const norm = normalizeArabic(raw)
     .split(" ")
-    .filter((w) => w.length > 2 && !STOP.has(w) && !/^\d+$/.test(w));
+    .filter(
+      (w) =>
+        w.length > 2 &&
+        w.length <= 18 &&
+        !STOP.has(w) &&
+        !/\d/.test(w) &&
+        !BOILERPLATE.test(w),
+    );
   for (const w of norm) freq.set(w, (freq.get(w) ?? 0) + 1);
   const topTerms = [...freq.entries()]
     .sort((a, b) => b[1] - a[1])

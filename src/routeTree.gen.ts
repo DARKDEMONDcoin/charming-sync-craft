@@ -61,6 +61,7 @@ import { Route as ApiPublicNourWeeklyRouteImport } from './routes/api/public/nou
 import { Route as ApiPublicPipedreamWebhookRouteImport } from './routes/api/public/pipedream-webhook'
 import { Route as ApiPublicProactiveRouteImport } from './routes/api/public/proactive'
 import { Route as ApiPublicPxRouteImport } from './routes/api/public/px'
+import { Route as ApiPublicSkilltestRouteImport } from './routes/api/public/skilltest'
 import { Route as ApiPublicSocialAutopilotRouteImport } from './routes/api/public/social-autopilot'
 import { Route as ApiPublicSocialQueueRouteImport } from './routes/api/public/social-queue'
 import { Route as ApiPublicTrackRouteImport } from './routes/api/public/track'
@@ -332,6 +333,11 @@ const ApiPublicPxRoute = ApiPublicPxRouteImport.update({
   path: '/api/public/px',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicSkilltestRoute = ApiPublicSkilltestRouteImport.update({
+  id: '/api/public/skilltest',
+  path: '/api/public/skilltest',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicSocialAutopilotRoute =
   ApiPublicSocialAutopilotRouteImport.update({
     id: '/api/public/social-autopilot',
@@ -423,6 +429,7 @@ export interface FileRoutesByFullPath {
   '/api/public/pipedream-webhook': typeof ApiPublicPipedreamWebhookRoute
   '/api/public/proactive': typeof ApiPublicProactiveRoute
   '/api/public/px': typeof ApiPublicPxRoute
+  '/api/public/skilltest': typeof ApiPublicSkilltestRoute
   '/api/public/social-autopilot': typeof ApiPublicSocialAutopilotRoute
   '/api/public/social-queue': typeof ApiPublicSocialQueueRoute
   '/api/public/track': typeof ApiPublicTrackRoute
@@ -483,6 +490,7 @@ export interface FileRoutesByTo {
   '/api/public/pipedream-webhook': typeof ApiPublicPipedreamWebhookRoute
   '/api/public/proactive': typeof ApiPublicProactiveRoute
   '/api/public/px': typeof ApiPublicPxRoute
+  '/api/public/skilltest': typeof ApiPublicSkilltestRoute
   '/api/public/social-autopilot': typeof ApiPublicSocialAutopilotRoute
   '/api/public/social-queue': typeof ApiPublicSocialQueueRoute
   '/api/public/track': typeof ApiPublicTrackRoute
@@ -545,6 +553,7 @@ export interface FileRoutesById {
   '/api/public/pipedream-webhook': typeof ApiPublicPipedreamWebhookRoute
   '/api/public/proactive': typeof ApiPublicProactiveRoute
   '/api/public/px': typeof ApiPublicPxRoute
+  '/api/public/skilltest': typeof ApiPublicSkilltestRoute
   '/api/public/social-autopilot': typeof ApiPublicSocialAutopilotRoute
   '/api/public/social-queue': typeof ApiPublicSocialQueueRoute
   '/api/public/track': typeof ApiPublicTrackRoute
@@ -608,6 +617,7 @@ export interface FileRouteTypes {
     | '/api/public/pipedream-webhook'
     | '/api/public/proactive'
     | '/api/public/px'
+    | '/api/public/skilltest'
     | '/api/public/social-autopilot'
     | '/api/public/social-queue'
     | '/api/public/track'
@@ -668,6 +678,7 @@ export interface FileRouteTypes {
     | '/api/public/pipedream-webhook'
     | '/api/public/proactive'
     | '/api/public/px'
+    | '/api/public/skilltest'
     | '/api/public/social-autopilot'
     | '/api/public/social-queue'
     | '/api/public/track'
@@ -729,6 +740,7 @@ export interface FileRouteTypes {
     | '/api/public/pipedream-webhook'
     | '/api/public/proactive'
     | '/api/public/px'
+    | '/api/public/skilltest'
     | '/api/public/social-autopilot'
     | '/api/public/social-queue'
     | '/api/public/track'
@@ -775,6 +787,7 @@ export interface RootRouteChildren {
   ApiPublicPipedreamWebhookRoute: typeof ApiPublicPipedreamWebhookRoute
   ApiPublicProactiveRoute: typeof ApiPublicProactiveRoute
   ApiPublicPxRoute: typeof ApiPublicPxRoute
+  ApiPublicSkilltestRoute: typeof ApiPublicSkilltestRoute
   ApiPublicSocialAutopilotRoute: typeof ApiPublicSocialAutopilotRoute
   ApiPublicSocialQueueRoute: typeof ApiPublicSocialQueueRoute
   ApiPublicTrackRoute: typeof ApiPublicTrackRoute
@@ -1148,6 +1161,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicPxRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/skilltest': {
+      id: '/api/public/skilltest'
+      path: '/api/public/skilltest'
+      fullPath: '/api/public/skilltest'
+      preLoaderRoute: typeof ApiPublicSkilltestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/social-autopilot': {
       id: '/api/public/social-autopilot'
       path: '/api/public/social-autopilot'
@@ -1281,6 +1301,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicPipedreamWebhookRoute: ApiPublicPipedreamWebhookRoute,
   ApiPublicProactiveRoute: ApiPublicProactiveRoute,
   ApiPublicPxRoute: ApiPublicPxRoute,
+  ApiPublicSkilltestRoute: ApiPublicSkilltestRoute,
   ApiPublicSocialAutopilotRoute: ApiPublicSocialAutopilotRoute,
   ApiPublicSocialQueueRoute: ApiPublicSocialQueueRoute,
   ApiPublicTrackRoute: ApiPublicTrackRoute,
