@@ -448,15 +448,32 @@ async function liveFactsInner(
 
   const facts = structured.filter(Boolean);
   const f = nowFacts(opts.timeZone ?? "Asia/Riyadh");
+  const snap = await import("./live-snapshot.server");
+  const snapKey = snap.snapshotKey(intent as unknown as Record<string, boolean>, {
+    country: code,
+    city,
+  });
 
-  if (!unique.length && !facts.length)
+  if (!unique.length && !facts.length) {
+    // الضمانة الأخيرة قبل الصمت: آخر لقطة محفوظة، معلَّمة بعمرها بوضوح.
+    const last = await snap.readSnapshot("live", snapKey);
+    if (last) {
+      const temporalMod = await import("./temporal.server");
+      return [
+        `## حقائق لحظية — تعذّر الوصول للمصادر الآن (${f.iso} ${f.clock} ${f.timeZone})`,
+        `آخر معلومة معروفة لدينا محفوظة ${temporalMod.ageLabel(last.capturedAt)}:`,
+        last.text,
+        "قل للمستخدم صراحةً إن المصادر لم تستجب الآن، وإن هذه آخر معلومة مؤكدة وعمرها كما هو مذكور. ممنوع تقديمها على أنها اللحظة الحالية.",
+      ].join("\n");
+    }
     return [
       "## حقائق لحظية",
       `بحثتَ الآن (${f.iso} ${f.clock}) عن «${q}» في عدة محركات ولم تُرجع نتائج موثوقة.`,
       "قل للمستخدم بصراحة في سطر واحد أنك بحثت ولم تجد مصدراً مؤكداً، واطلب التفصيلة (النتيجة/الاسم/التاريخ) ثم نفّذ طلبه فوراً عليها. ممنوع اختلاق نتيجة أو رقم.",
     ].join("\n");
+  }
 
-  return [
+  const block = [
     `## حقائق لحظية — بحث حيّ نُفّذ الآن (${f.iso} ${f.clock} ${f.timeZone}) عن «${q}»`,
     ...facts.map((s) => `- ${s}`),
     ...unique.map((r) => {
@@ -476,6 +493,10 @@ async function liveFactsInner(
   ]
     .filter(Boolean)
     .join("\n");
+
+  // نجاح الآن = احتياط الغد: نحفظ اللقطة بلا انتظار حتى لا تتأخر الإجابة.
+  void snap.saveSnapshot("live", snapKey, block);
+  return block;
 }
 
 /** لقطة «ما الذي يحدث الآن» لمهام الخلفية (البريفنج/الأوتوبايلوت) بلا سؤال محدد. */
