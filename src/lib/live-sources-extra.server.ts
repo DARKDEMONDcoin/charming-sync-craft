@@ -148,52 +148,79 @@ export async function redditSearch(query: string, { ms = 7_000 } = {}): Promise<
 
 /* ————————————————— بدائل البيانات المنظّمة ————————————————— */
 
+type FxSnap = { date: string; rates: Record<string, number>; source: string };
+
+/**
+ * أسعار الصرف: لا نكتفي بأول مزوّد — نكمل على البدائل حتى تُغطّى كل العملات
+ * المطلوبة (فرانكفورتر مثلاً لا يعرف الجنيه المصري، وغيره يعرفه).
+ */
 export async function fxAny(base = "USD", quotes: string[] = [], { ms = 7_000 } = {}): Promise<string> {
-  const fmt = (date: string, rates: Record<string, number>, src: string) => {
-    const list = Object.entries(rates)
-      .filter(([k]) => !quotes.length || quotes.includes(k))
-      .slice(0, 8);
-    if (!list.length) return "";
-    return `أسعار الصرف (${base}) بتاريخ ${date}: ${list.map(([k, v]) => `${k} ${Number(v).toFixed(3)}`).join(" • ")}. (${src})`;
-  };
-  return firstNonEmpty<string>(
-    [
-      async () => {
-        const j = await resilientJson<{ date?: string; rates?: Record<string, number> }>(
-          `https://api.frankfurter.dev/v1/latest?base=${base}${quotes.length ? `&symbols=${quotes.join(",")}` : ""}`,
-          { ms },
-        );
-        return fmt(j.date ?? "", j.rates ?? {}, "Frankfurter");
-      },
-      async () => {
-        const j = await resilientJson<{ time_last_update_utc?: string; rates?: Record<string, number> }>(
-          `https://open.er-api.com/v6/latest/${base}`,
-          { ms },
-        );
-        return fmt(j.time_last_update_utc ?? "", j.rates ?? {}, "ExchangeRate-API");
-      },
-      async () => {
-        const j = await resilientJson<{ date?: string; rates?: Record<string, number> }>(
-          `https://api.exchangerate.host/latest?base=${base}`,
-          { ms },
-        );
-        return fmt(j.date ?? "", j.rates ?? {}, "exchangerate.host");
-      },
-      async () => {
-        const j = await resilientJson<Record<string, Record<string, number>>>(
-          `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/${base.toLowerCase()}.json`,
-          { ms },
-        );
-        const key = Object.keys(j).find((k) => k !== "date") ?? base.toLowerCase();
-        const raw = j[key] ?? {};
-        const upper: Record<string, number> = {};
-        for (const [k, v] of Object.entries(raw)) upper[k.toUpperCase()] = v as number;
-        return fmt(String((j as unknown as { date?: string }).date ?? ""), upper, "Currency-API");
-      },
-    ],
-    (s) => !s,
-    "",
-  );
+  const wanted = quotes.filter(Boolean);
+  const providers: (() => Promise<FxSnap>)[] = [
+    async () => {
+      const j = await resilientJson<{ date?: string; rates?: Record<string, number> }>(
+        `https://api.frankfurter.dev/v1/latest?base=${base}`,
+        { ms },
+      );
+      return { date: j.date ?? "", rates: j.rates ?? {}, source: "Frankfurter" };
+    },
+    async () => {
+      const j = await resilientJson<{ time_last_update_utc?: string; rates?: Record<string, number> }>(
+        `https://open.er-api.com/v6/latest/${base}`,
+        { ms },
+      );
+      return { date: (j.time_last_update_utc ?? "").slice(0, 16), rates: j.rates ?? {}, source: "ExchangeRate-API" };
+    },
+    async () => {
+      const j = await resilientJson<Record<string, unknown>>(
+        `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/${base.toLowerCase()}.json`,
+        { ms },
+      );
+      const key = Object.keys(j).find((k) => k !== "date") ?? base.toLowerCase();
+      const raw = (j[key] ?? {}) as Record<string, number>;
+      const upper: Record<string, number> = {};
+      for (const [k, v] of Object.entries(raw)) upper[k.toUpperCase()] = Number(v);
+      return { date: String(j["date"] ?? ""), rates: upper, source: "Currency-API" };
+    },
+    async () => {
+      const j = await resilientJson<{ date?: string; rates?: Record<string, number> }>(
+        `https://api.exchangerate.host/latest?base=${base}`,
+        { ms },
+      );
+      return { date: j.date ?? "", rates: j.rates ?? {}, source: "exchangerate.host" };
+    },
+  ];
+
+  const merged: Record<string, number> = {};
+  const used: string[] = [];
+  let date = "";
+  for (const load of providers) {
+    const missing = wanted.filter((c) => merged[c] === undefined);
+    if (wanted.length && !missing.length) break;
+    try {
+      const snap = await load();
+      let added = false;
+      for (const [k, v] of Object.entries(snap.rates)) {
+        if (wanted.length && !wanted.includes(k)) continue;
+        if (merged[k] === undefined && Number.isFinite(Number(v))) {
+          merged[k] = Number(v);
+          added = true;
+        }
+      }
+      if (added) {
+        used.push(snap.source);
+        date ||= snap.date;
+      }
+    } catch {
+      /* المزوّد التالي */
+    }
+  }
+
+  const list = Object.entries(merged).slice(0, 8);
+  if (!list.length) return "";
+  return `أسعار الصرف (${base}) بتاريخ ${date}: ${list
+    .map(([k, v]) => `${k} ${v.toFixed(3)}`)
+    .join(" • ")}. (${used.join(" + ")})`;
 }
 
 export async function cryptoAny(
