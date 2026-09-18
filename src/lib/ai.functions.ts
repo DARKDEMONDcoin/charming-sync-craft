@@ -413,10 +413,11 @@ export async function runEmployeeTurn(
     const { expertMindBlock } = await import("./expert-mind");
 
     // الوعي اللحظي: الزمن الدقيق دائماً + بحث حيّ عن الأحداث الجارية عند الحاجة.
-    const { nowBlock, needsLiveFacts, liveFactsBlock } = await import("./live-context.server");
+    const { nowBlock, needsLiveFacts, liveFactsBlock, timezoneForCountry } = await import(
+      "./live-context.server"
+    );
     const timezone =
-      (workspace as { timezone?: string | null }).timezone ??
-      (ws.country === "SA" ? "Asia/Riyadh" : "Africa/Cairo");
+      (workspace as { timezone?: string | null }).timezone ?? timezoneForCountry(ws.country);
 
     emit({ type: "step", label: `أجمع أدلة وأرقاماً حقيقية عن «${turnTopic}»` });
     const [research, liveBlock] = await Promise.all([
