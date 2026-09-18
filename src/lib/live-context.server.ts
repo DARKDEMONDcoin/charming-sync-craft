@@ -168,14 +168,46 @@ export async function liveFactsBlock(
   budgetMs = 13_000,
   opts: LiveOptions = {},
 ): Promise<string> {
+  // سقف صارم: مهما تعثّرت المصادر أو تباطأت المرايا، الرد على المستخدم لا يتأخر.
+  const { withBudget } = await import("./net-resilience.server");
+  return withBudget(liveFactsInner(message, budgetMs, opts), budgetMs + 2_000, "");
+}
+
+/** المدن المذكورة صراحة في السؤال تتقدّم على مدينة العلامة (طقس/مواقيت). */
+const CITY_HINTS: Record<string, { city: string; country: string }> = {
+  "القاهرة": { city: "Cairo", country: "Egypt" },
+  "الإسكندرية": { city: "Alexandria", country: "Egypt" },
+  "الرياض": { city: "Riyadh", country: "Saudi Arabia" },
+  "جدة": { city: "Jeddah", country: "Saudi Arabia" },
+  "مكة": { city: "Mecca", country: "Saudi Arabia" },
+  "المدينة": { city: "Medina", country: "Saudi Arabia" },
+  "دبي": { city: "Dubai", country: "United Arab Emirates" },
+  "أبوظبي": { city: "Abu Dhabi", country: "United Arab Emirates" },
+  "الدوحة": { city: "Doha", country: "Qatar" },
+  "الكويت": { city: "Kuwait City", country: "Kuwait" },
+  "عمّان": { city: "Amman", country: "Jordan" },
+  "بغداد": { city: "Baghdad", country: "Iraq" },
+  "بيروت": { city: "Beirut", country: "Lebanon" },
+  "الدار البيضاء": { city: "Casablanca", country: "Morocco" },
+  "تونس": { city: "Tunis", country: "Tunisia" },
+  "الجزائر": { city: "Algiers", country: "Algeria" },
+  "الخرطوم": { city: "Khartoum", country: "Sudan" },
+};
+
+async function liveFactsInner(
+  message: string,
+  budgetMs: number,
+  opts: LiveOptions,
+): Promise<string> {
   const q = queryOf(message);
   if (!q) return "";
   const started = Date.now();
   const left = () => budgetMs - (Date.now() - started);
   const intent = intentOf(message);
   const code = (opts.country ?? "EG").toUpperCase();
-  const place = COUNTRY_CITY[code] ?? COUNTRY_CITY["EG"]!;
-  const city = opts.city?.trim() || place.city;
+  const hinted = Object.entries(CITY_HINTS).find(([name]) => message.includes(name))?.[1];
+  const place = hinted ?? COUNTRY_CITY[code] ?? COUNTRY_CITY["EG"]!;
+  const city = hinted?.city || opts.city?.trim() || place.city;
 
   const sources = await import("./live-sources.server");
   const searchMs = Math.min(Math.max(left() - 1_500, 4_000), 10_000);
