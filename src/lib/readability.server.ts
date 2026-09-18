@@ -32,7 +32,8 @@ export function extractArticle(html: string, url: string): ReadableArticle | nul
       charThreshold: 200,
     }).parse();
     if (!article?.textContent) return null;
-    const text = article.textContent.replace(/\s+/g, " ").trim();
+    // النص الخام من Readability يلصق الفقرات ببعضها («مواعيدالعمل»)، فنعيد حدود الكتل من HTML
+    const text = blockAwareText(article.content ?? "") || article.textContent.replace(/\s+/g, " ").trim();
     if (text.length < 200) return null;
     return {
       title: (article.title ?? "").trim(),
