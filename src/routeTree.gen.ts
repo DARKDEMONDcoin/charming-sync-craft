@@ -55,7 +55,6 @@ import { Route as EmployeesIdRouteImport } from './routes/employees.$id'
 import { Route as UseCasesIndexRouteImport } from './routes/use-cases.index'
 import { Route as UseCasesIdRouteImport } from './routes/use-cases.$id'
 import { Route as ApiPublicLearningCycleRouteImport } from './routes/api/public/learning-cycle'
-import { Route as ApiPublicLivedbgRouteImport } from './routes/api/public/livedbg'
 import { Route as ApiPublicMorningBriefingRouteImport } from './routes/api/public/morning-briefing'
 import { Route as ApiPublicNourAutomationsRouteImport } from './routes/api/public/nour-automations'
 import { Route as ApiPublicNourWeeklyRouteImport } from './routes/api/public/nour-weekly'
@@ -300,11 +299,6 @@ const ApiPublicLearningCycleRoute = ApiPublicLearningCycleRouteImport.update({
   path: '/api/public/learning-cycle',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicLivedbgRoute = ApiPublicLivedbgRouteImport.update({
-  id: '/api/public/livedbg',
-  path: '/api/public/livedbg',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiPublicMorningBriefingRoute =
   ApiPublicMorningBriefingRouteImport.update({
     id: '/api/public/morning-briefing',
@@ -423,7 +417,6 @@ export interface FileRoutesByFullPath {
   '/employees/': typeof EmployeesIndexRoute
   '/use-cases/': typeof UseCasesIndexRoute
   '/api/public/learning-cycle': typeof ApiPublicLearningCycleRoute
-  '/api/public/livedbg': typeof ApiPublicLivedbgRoute
   '/api/public/morning-briefing': typeof ApiPublicMorningBriefingRoute
   '/api/public/nour-automations': typeof ApiPublicNourAutomationsRoute
   '/api/public/nour-weekly': typeof ApiPublicNourWeeklyRoute
@@ -484,7 +477,6 @@ export interface FileRoutesByTo {
   '/employees': typeof EmployeesIndexRoute
   '/use-cases': typeof UseCasesIndexRoute
   '/api/public/learning-cycle': typeof ApiPublicLearningCycleRoute
-  '/api/public/livedbg': typeof ApiPublicLivedbgRoute
   '/api/public/morning-briefing': typeof ApiPublicMorningBriefingRoute
   '/api/public/nour-automations': typeof ApiPublicNourAutomationsRoute
   '/api/public/nour-weekly': typeof ApiPublicNourWeeklyRoute
@@ -547,7 +539,6 @@ export interface FileRoutesById {
   '/employees/': typeof EmployeesIndexRoute
   '/use-cases/': typeof UseCasesIndexRoute
   '/api/public/learning-cycle': typeof ApiPublicLearningCycleRoute
-  '/api/public/livedbg': typeof ApiPublicLivedbgRoute
   '/api/public/morning-briefing': typeof ApiPublicMorningBriefingRoute
   '/api/public/nour-automations': typeof ApiPublicNourAutomationsRoute
   '/api/public/nour-weekly': typeof ApiPublicNourWeeklyRoute
@@ -611,7 +602,6 @@ export interface FileRouteTypes {
     | '/employees/'
     | '/use-cases/'
     | '/api/public/learning-cycle'
-    | '/api/public/livedbg'
     | '/api/public/morning-briefing'
     | '/api/public/nour-automations'
     | '/api/public/nour-weekly'
@@ -672,7 +662,6 @@ export interface FileRouteTypes {
     | '/employees'
     | '/use-cases'
     | '/api/public/learning-cycle'
-    | '/api/public/livedbg'
     | '/api/public/morning-briefing'
     | '/api/public/nour-automations'
     | '/api/public/nour-weekly'
@@ -734,7 +723,6 @@ export interface FileRouteTypes {
     | '/employees/'
     | '/use-cases/'
     | '/api/public/learning-cycle'
-    | '/api/public/livedbg'
     | '/api/public/morning-briefing'
     | '/api/public/nour-automations'
     | '/api/public/nour-weekly'
@@ -781,7 +769,6 @@ export interface RootRouteChildren {
   EmployeesIndexRoute: typeof EmployeesIndexRoute
   UseCasesIndexRoute: typeof UseCasesIndexRoute
   ApiPublicLearningCycleRoute: typeof ApiPublicLearningCycleRoute
-  ApiPublicLivedbgRoute: typeof ApiPublicLivedbgRoute
   ApiPublicMorningBriefingRoute: typeof ApiPublicMorningBriefingRoute
   ApiPublicNourAutomationsRoute: typeof ApiPublicNourAutomationsRoute
   ApiPublicNourWeeklyRoute: typeof ApiPublicNourWeeklyRoute
@@ -1119,13 +1106,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicLearningCycleRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/livedbg': {
-      id: '/api/public/livedbg'
-      path: '/api/public/livedbg'
-      fullPath: '/api/public/livedbg'
-      preLoaderRoute: typeof ApiPublicLivedbgRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/public/morning-briefing': {
       id: '/api/public/morning-briefing'
       path: '/api/public/morning-briefing'
@@ -1295,7 +1275,6 @@ const rootRouteChildren: RootRouteChildren = {
   EmployeesIndexRoute: EmployeesIndexRoute,
   UseCasesIndexRoute: UseCasesIndexRoute,
   ApiPublicLearningCycleRoute: ApiPublicLearningCycleRoute,
-  ApiPublicLivedbgRoute: ApiPublicLivedbgRoute,
   ApiPublicMorningBriefingRoute: ApiPublicMorningBriefingRoute,
   ApiPublicNourAutomationsRoute: ApiPublicNourAutomationsRoute,
   ApiPublicNourWeeklyRoute: ApiPublicNourWeeklyRoute,
