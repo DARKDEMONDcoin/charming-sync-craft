@@ -431,7 +431,7 @@ export async function runEmployeeTurn(
         longForm ? 22_000 : 12_000,
       ),
       needsLiveFacts(data.message)
-        ? liveFactsBlock(data.message, 13_000, {
+        ? liveFactsBlock(data.message, 20_000, {
             country: ws.country,
             city: (ws as { city?: string | null }).city ?? null,
             timeZone: timezone,

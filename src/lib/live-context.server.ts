@@ -175,18 +175,27 @@ export async function liveFactsBlock(
   const out = await withBudget(liveFactsInner(message, budgetMs, opts, partial), budgetMs + 2_000, "");
   if (out) return out;
   if (partial.text) return partial.text;
-  // انتهت المهلة قبل الترتيب النهائي: نسلّم ما وصل فعلاً بدل الصمت.
-  const rows = (partial.rows ?? []).slice(0, 8);
-  if (!rows.length) return "";
+  // انتهت المهلة قبل الترتيب النهائي: نسلّم ما وصل فعلاً بدل الصمت — مرتّباً بالأحدث
+  // ومنقّى من المكرر، مع تقديم ما له تاريخ نشر على الصفحات العامة بلا تاريخ.
+  const all = partial.rows ?? [];
+  if (!all.length) return "";
   const temporal = await import("./temporal.server");
+  const seen = new Set<string>();
+  const ranked = all
+    .filter((r) => r.url && r.title && !seen.has(r.url) && seen.add(r.url))
+    .map((r) => ({ r, t: temporal.parseStamp(r.date) }))
+    .sort((a, b) => b.t - a.t);
+  const dated = ranked.filter((x) => x.t > 0);
+  const rows = (dated.length ? dated : ranked).slice(0, 8);
   return [
     "## حقائق لحظية — نتائج بحث حيّ وصلت قبل انتهاء المهلة",
-    ...rows.map((r) => {
-      const t = temporal.parseStamp(r.date);
-      return `- ${r.title}${r.snippet ? ` — ${r.snippet}` : ""}${t ? ` [${temporal.ageLabel(t)}]` : ""} (${r.source})`;
-    }),
+    ...rows.map(
+      ({ r, t }) =>
+        `- ${r.title}${r.snippet ? ` — ${r.snippet}` : ""} [${t ? `${temporal.ageLabel(t)} — ${temporal.freshnessTag(t)}` : "بلا تاريخ"}] (${r.source})`,
+    ),
     "اعتمد هذه النتائج كمصدر للأحداث الجارية، واذكر عمر كل خبر.",
   ].join("\n");
+
 }
 
 /** المدن المذكورة صراحة في السؤال تتقدّم على مدينة العلامة (طقس/مواقيت). */
@@ -285,18 +294,12 @@ async function liveFactsInner(
     ),
   );
 
-  // 1-ب) سؤال عام عن «آخر الأخبار» بلا كيان محدد: البحث بالكلمات يعطي صفحات أقسام
-  //      لا أخباراً. الصحيح هنا عناوين الرئيسية اللحظية من الخلاصات مباشرة.
-  const generic = !norm(q)
-    .split(/[^\p{L}\p{N}]+/u)
-    .some(
-      (t) =>
-        t.length >= 3 &&
-        !STOP.has(t) &&
-        !/خبر|اخبار|تقني|تقنيه|تكنولوجيا|ساعه|ساعة|24|عالم|مهم|اهم|حصل|جديد|news|tech/u.test(t),
-    );
-  if (generic && (intent.news || intent.tech)) {
-    webTasks.push(
+  // 1-ب) عناوين لحظية موضوعية: أي سؤال عن الأخبار أو التقنية يستحق عناوين الرئيسية
+  //      مباشرة من الخلاصات، لأن البحث بالكلمات يعطي صفحات أقسام لا أخباراً. هذه
+  //      النتائج لا تخضع لتصفية الكلمات لأن مصدرها موضوعي أصلاً.
+  const topicalTasks: Promise<LiveRow[]>[] = [];
+  if (intent.news || intent.tech) {
+    topicalTasks.push(
       settled(sources.googleNewsTop({ country: code, ms: searchMs }), []),
       settled(
         (async () => (await import("./live-sources-extra.server")).arabicFeeds({ ms: searchMs }))(),
@@ -304,7 +307,7 @@ async function liveFactsInner(
       ),
     );
     if (intent.tech)
-      webTasks.push(
+      topicalTasks.push(
         settled(sources.hackerNewsSearch("AI OR startup OR launch", { ms: searchMs }), []),
         settled(
           (async () => (await import("./live-sources-world.server")).lobsters({ ms: searchMs }))(),
@@ -312,6 +315,7 @@ async function liveFactsInner(
         ),
       );
   }
+
 
   // 2) مصادر منظّمة حسب النيّة — إجابات قاطعة بأرقام حقيقية.
   const structuredTasks: Promise<string>[] = [];
@@ -359,19 +363,32 @@ async function liveFactsInner(
   });
   // كل ما يصل من نتائج يُسجَّل فوراً: لو انتهت المهلة قبل اكتمال الكل نسلّم ما وصل.
   const bag: LiveRow[] = (partial.rows ??= []);
-  const tracked = webTasks.map((p) =>
+  const track = (p: Promise<LiveRow[]>) =>
     p.then((rows) => {
       for (const r of rows) if (r?.url && r?.title) bag.push(r);
       return rows;
-    }),
-  );
-  const [webResults, structured] = await Promise.all([Promise.all(tracked), structuredP]);
+    });
+  const tracked = webTasks.map(track);
+  const trackedTopical = topicalTasks.map(track);
+  // لا ننتظر أبطأ مصدر: نمنح المجموعة سقفاً زمنياً، وما لم يصل يُهمَل بلا تعطيل.
+  const cap = Math.max(3_000, Math.min(left() - 2_000, searchMs + 1_500));
+  const capped = <T>(p: Promise<T>, empty: T) =>
+    Promise.race([p, new Promise<T>((r) => setTimeout(() => r(empty), cap))]);
+  const [webResults, topicalResults, structured] = await Promise.all([
+    capped(Promise.all(tracked), [] as LiveRow[][]),
+    capped(Promise.all(trackedTopical), [] as LiveRow[][]),
+    capped(structuredP, [] as string[]),
+  ]);
 
-  let rows = generic
-    ? webResults.flatMap((r) => r.slice(0, 6))
-    : webResults.flatMap((r) => relevantRows(r, q).slice(0, 6));
-  // لو أسقطت التصفية كل شيء، نأخذ أفضل ما جاءت به مصادر الأخبار الخام (الأحدث زمنياً).
-  if (!rows.length) rows = webResults.flatMap((r) => r.filter((x) => x.date).slice(0, 4));
+  let rows = [
+    ...webResults.flatMap((r) => relevantRows(r, q).slice(0, 6)),
+    ...topicalResults.flatMap((r) => r.slice(0, 6)),
+  ];
+  // لو تأخّر بعض المصادر: نستخدم ما وصل إلى السلة فعلاً بدل الاكتفاء بالفارغ.
+  if (!rows.length) rows = relevantRows(bag, q).slice(0, 10);
+  if (!rows.length) rows = bag.filter((x) => x.date).slice(0, 8);
+
+
   const seen = new Set<string>();
   let unique = rows.filter((r) => r.url && r.title && !seen.has(r.url) && seen.add(r.url));
 
