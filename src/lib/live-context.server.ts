@@ -285,18 +285,12 @@ async function liveFactsInner(
     ),
   );
 
-  // 1-ب) سؤال عام عن «آخر الأخبار» بلا كيان محدد: البحث بالكلمات يعطي صفحات أقسام
-  //      لا أخباراً. الصحيح هنا عناوين الرئيسية اللحظية من الخلاصات مباشرة.
-  const generic = !norm(q)
-    .split(/[^\p{L}\p{N}]+/u)
-    .some(
-      (t) =>
-        t.length >= 3 &&
-        !STOP.has(t) &&
-        !/خبر|اخبار|تقني|تقنيه|تكنولوجيا|ساعه|ساعة|24|عالم|مهم|اهم|حصل|جديد|news|tech/u.test(t),
-    );
-  if (generic && (intent.news || intent.tech)) {
-    webTasks.push(
+  // 1-ب) عناوين لحظية موضوعية: أي سؤال عن الأخبار أو التقنية يستحق عناوين الرئيسية
+  //      مباشرة من الخلاصات، لأن البحث بالكلمات يعطي صفحات أقسام لا أخباراً. هذه
+  //      النتائج لا تخضع لتصفية الكلمات لأن مصدرها موضوعي أصلاً.
+  const topicalTasks: Promise<LiveRow[]>[] = [];
+  if (intent.news || intent.tech) {
+    topicalTasks.push(
       settled(sources.googleNewsTop({ country: code, ms: searchMs }), []),
       settled(
         (async () => (await import("./live-sources-extra.server")).arabicFeeds({ ms: searchMs }))(),
@@ -304,7 +298,7 @@ async function liveFactsInner(
       ),
     );
     if (intent.tech)
-      webTasks.push(
+      topicalTasks.push(
         settled(sources.hackerNewsSearch("AI OR startup OR launch", { ms: searchMs }), []),
         settled(
           (async () => (await import("./live-sources-world.server")).lobsters({ ms: searchMs }))(),
@@ -312,6 +306,7 @@ async function liveFactsInner(
         ),
       );
   }
+
 
   // 2) مصادر منظّمة حسب النيّة — إجابات قاطعة بأرقام حقيقية.
   const structuredTasks: Promise<string>[] = [];
