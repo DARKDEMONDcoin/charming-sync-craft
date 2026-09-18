@@ -276,6 +276,13 @@ export async function liveFactsBlock(
     unique.push(...relevantRows(wiki, q).slice(0, 5));
   }
 
+  // 5) الضمانة الأخيرة: خلاصات إخبارية مباشرة (بلا محرك بحث إطلاقاً).
+  if (!unique.length && left() > 2_000) {
+    const feeds = await settled(extra.arabicFeeds({ ms: Math.min(left(), 6_000) }), []);
+    const relevant = relevantRows(feeds, q);
+    unique.push(...(relevant.length ? relevant : feeds.slice(0, 5)).slice(0, 6));
+  }
+
   const facts = structured.filter(Boolean);
   const f = nowFacts(opts.timeZone ?? "Asia/Riyadh");
 
