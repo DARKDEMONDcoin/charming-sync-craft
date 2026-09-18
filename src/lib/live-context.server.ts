@@ -285,6 +285,34 @@ async function liveFactsInner(
     ),
   );
 
+  // 1-ب) سؤال عام عن «آخر الأخبار» بلا كيان محدد: البحث بالكلمات يعطي صفحات أقسام
+  //      لا أخباراً. الصحيح هنا عناوين الرئيسية اللحظية من الخلاصات مباشرة.
+  const generic = !norm(q)
+    .split(/[^\p{L}\p{N}]+/u)
+    .some(
+      (t) =>
+        t.length >= 3 &&
+        !STOP.has(t) &&
+        !/خبر|اخبار|تقني|تقنيه|تكنولوجيا|ساعه|ساعة|24|عالم|مهم|اهم|حصل|جديد|news|tech/u.test(t),
+    );
+  if (generic && (intent.news || intent.tech)) {
+    webTasks.push(
+      settled(sources.googleNewsTop({ country: code, ms: searchMs }), []),
+      settled(
+        (async () => (await import("./live-sources-extra.server")).arabicFeeds({ ms: searchMs }))(),
+        [],
+      ),
+    );
+    if (intent.tech)
+      webTasks.push(
+        settled(sources.hackerNewsSearch("AI OR startup OR launch", { ms: searchMs }), []),
+        settled(
+          (async () => (await import("./live-sources-world.server")).lobsters({ ms: searchMs }))(),
+          [],
+        ),
+      );
+  }
+
   // 2) مصادر منظّمة حسب النيّة — إجابات قاطعة بأرقام حقيقية.
   const structuredTasks: Promise<string>[] = [];
   // كل نوع بيانات له سلسلة بدائل داخلية (مزوّد أول ثم ثانٍ ثم ثالث).
@@ -339,7 +367,9 @@ async function liveFactsInner(
   );
   const [webResults, structured] = await Promise.all([Promise.all(tracked), structuredP]);
 
-  let rows = webResults.flatMap((r) => relevantRows(r, q).slice(0, 6));
+  let rows = generic
+    ? webResults.flatMap((r) => r.slice(0, 6))
+    : webResults.flatMap((r) => relevantRows(r, q).slice(0, 6));
   // لو أسقطت التصفية كل شيء، نأخذ أفضل ما جاءت به مصادر الأخبار الخام (الأحدث زمنياً).
   if (!rows.length) rows = webResults.flatMap((r) => r.filter((x) => x.date).slice(0, 4));
   const seen = new Set<string>();
