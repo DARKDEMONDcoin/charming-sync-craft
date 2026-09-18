@@ -232,7 +232,32 @@ async function liveFactsInner(
       settled(sources.googleNewsSearch(q, { country: code, ms: searchMs }), []),
       settled(sources.gdeltNews(q, { ms: searchMs }), []),
     );
-  if (intent.tech) webTasks.push(settled(sources.hackerNewsSearch(q, { ms: searchMs }), []));
+  if (intent.tech) {
+    webTasks.push(settled(sources.hackerNewsSearch(q, { ms: searchMs }), []));
+    webTasks.push(
+      settled(
+        (async () => (await import("./live-sources-world.server")).lobsters({ ms: searchMs }))(),
+        [],
+      ),
+    );
+  }
+  // نبض اجتماعي + محرك بديل: يغطّيان الحالات التي تصمت فيها المحركات التقليدية.
+  webTasks.push(
+    settled(
+      (async () => {
+        const world = await import("./live-sources-world.server");
+        return world.libreySearch(q, { ms: searchMs });
+      })(),
+      [],
+    ),
+    settled(
+      (async () => {
+        const world = await import("./live-sources-world.server");
+        return world.mastodonTag(q.split(/\s+/)[0] ?? "", { ms: Math.min(searchMs, 5_000) });
+      })(),
+      [],
+    ),
+  );
   // بدائل دائمة تعمل بالتوازي: لو حُجب محرك أو سقط مزوّد يبقى هناك من يجيب.
   webTasks.push(
     settled(
