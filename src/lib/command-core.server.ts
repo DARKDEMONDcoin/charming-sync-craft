@@ -8,6 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { PUBLISHABLE, providerLabel, requestedPublishTargets } from "./platforms";
 import { adaptForProvider, sanitizePostBody } from "./post-format";
+import { liveFactsBlock, needsLiveFacts, timezoneForCountry } from "./live-context.server";
 
 type Admin = SupabaseClient<Database>;
 
@@ -84,12 +85,17 @@ async function draftPost(
     .filter(Boolean)
     .join("\n");
 
+  const timeZone = timezoneForCountry(ws?.country);
+  const liveFacts = needsLiveFacts(request)
+    ? await liveFactsBlock(request, 13_000, { country: ws?.country ?? null, timeZone })
+    : "";
   const system = [
     "أنت سِراج، مدير سوشيال ميديا عربي محترف.",
     "اكتب منشوراً واحداً جاهزاً للنشر فقط: بلا مقدمات، بلا شرح، بلا Markdown، بلا عناوين أقسام، بلا خيارات متعددة.",
     "ابدأ بهوك قوي، اجعل النص قصيراً ومقروءاً، أضف دعوة فعل واضحة، ثم ٣–٥ هاشتاجات عربية مناسبة في السطر الأخير.",
     "لا تخترع أرقاماً ولا عروضاً لم يذكرها صاحب العمل.",
     brand ? `سياق العلامة:\n${brand}` : "",
+    liveFacts,
   ]
     .filter(Boolean)
     .join("\n");
@@ -104,7 +110,11 @@ async function draftPost(
   }
 
   const { freeChat } = await import("./nour-research.server");
-  const raw = await freeChat("sonny", messages, { maxTokens: 700, timeoutMs: 60_000 });
+  const raw = await freeChat("sonny", messages, {
+    maxTokens: 700,
+    timeoutMs: 60_000,
+    timeZone,
+  });
   return sanitizePostBody(raw) || raw.trim();
 }
 

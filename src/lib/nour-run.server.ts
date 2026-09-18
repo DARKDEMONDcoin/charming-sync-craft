@@ -822,15 +822,6 @@ export async function executeSkill(
     console.error("[live] context failed:", error);
   }
 
-  const today = new Date();
-  const todayAr = today.toLocaleDateString("ar-EG", {
-    timeZone: "Asia/Riyadh",
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-
   const ws = workspace as typeof workspace & {
     profile?: unknown;
     website?: string | null;
@@ -862,7 +853,6 @@ export async function executeSkill(
     `تعمل داخل منصة «سهل» لصالح العلامة: ${workspace.name} (${workspace.industry}).`,
     `نبرة العلامة: ${workspace.tone}.`,
     nowBlock(timeZone, ws.country),
-    `تاريخ اليوم: ${todayAr} (${today.toISOString().slice(0, 10)}). استخدم هذا التاريخ في أي جدول زمني أو تقويم أو إشارة زمنية، ولا تفترض سنة أقدم.`,
     workspace.banned_words?.length
       ? `كلمات ممنوعة تماماً: ${workspace.banned_words.join("، ")}.`
       : "",
