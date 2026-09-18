@@ -370,18 +370,24 @@ async function liveFactsInner(
     });
   const tracked = webTasks.map(track);
   const trackedTopical = topicalTasks.map(track);
+  // لا ننتظر أبطأ مصدر: نمنح المجموعة سقفاً زمنياً، وما لم يصل يُهمَل بلا تعطيل.
+  const cap = Math.max(3_000, Math.min(left() - 2_000, searchMs + 1_500));
+  const capped = <T>(p: Promise<T>, empty: T) =>
+    Promise.race([p, new Promise<T>((r) => setTimeout(() => r(empty), cap))]);
   const [webResults, topicalResults, structured] = await Promise.all([
-    Promise.all(tracked),
-    Promise.all(trackedTopical),
-    structuredP,
+    capped(Promise.all(tracked), [] as LiveRow[][]),
+    capped(Promise.all(trackedTopical), [] as LiveRow[][]),
+    capped(structuredP, [] as string[]),
   ]);
 
   let rows = [
     ...webResults.flatMap((r) => relevantRows(r, q).slice(0, 6)),
     ...topicalResults.flatMap((r) => r.slice(0, 6)),
   ];
-  // لو أسقطت التصفية كل شيء، نأخذ أفضل ما جاءت به مصادر الأخبار الخام (الأحدث زمنياً).
-  if (!rows.length) rows = webResults.flatMap((r) => r.filter((x) => x.date).slice(0, 4));
+  // لو تأخّر بعض المصادر: نستخدم ما وصل إلى السلة فعلاً بدل الاكتفاء بالفارغ.
+  if (!rows.length) rows = relevantRows(bag, q).slice(0, 10);
+  if (!rows.length) rows = bag.filter((x) => x.date).slice(0, 8);
+
 
   const seen = new Set<string>();
   let unique = rows.filter((r) => r.url && r.title && !seen.has(r.url) && seen.add(r.url));
