@@ -171,15 +171,36 @@ export async function liveFactsBlock(
   // سقف صارم: مهما تعثّرت المصادر أو تباطأت المرايا، الرد على المستخدم لا يتأخر.
   // ومع ذلك لا نرجع فارغين: ما وصل من أرقام رسمية قبل انتهاء المهلة يُسلَّم كما هو.
   const { withBudget } = await import("./net-resilience.server");
+  const snap = await import("./live-snapshot.server");
+  const key = snap.snapshotKey(intentOf(message) as unknown as Record<string, boolean>, {
+    country: (opts.country ?? "EG").toUpperCase(),
+    city: opts.city ?? null,
+  });
   const partial: { text: string; rows?: LiveRow[] } = { text: "", rows: [] };
   const out = await withBudget(liveFactsInner(message, budgetMs, opts, partial), budgetMs + 2_000, "");
-  if (out) return out;
-  if (partial.text) return partial.text;
+  if (out) {
+    await snap.saveSnapshot("live", key, out);
+    return out;
+  }
+  if (partial.text) {
+    await snap.saveSnapshot("live", key, partial.text);
+    return partial.text;
+  }
   // انتهت المهلة قبل الترتيب النهائي: نسلّم ما وصل فعلاً بدل الصمت — مرتّباً بالأحدث
   // ومنقّى من المكرر، مع تقديم ما له تاريخ نشر على الصفحات العامة بلا تاريخ.
   const all = partial.rows ?? [];
-  if (!all.length) return "";
   const temporal = await import("./temporal.server");
+  if (!all.length) {
+    // لا مصدر استجاب إطلاقاً: آخر لقطة محفوظة بدل الصمت، مع ذكر عمرها صراحة.
+    const last = await snap.readSnapshot("live", key);
+    if (!last) return "";
+    return [
+      "## حقائق لحظية — تعذّر الوصول للمصادر الآن",
+      `آخر معلومة معروفة محفوظة ${temporal.ageLabel(last.capturedAt)}:`,
+      last.text,
+      "قل للمستخدم صراحةً إن المصادر لم تستجب الآن، وإن هذه آخر معلومة مؤكدة وعمرها كما هو مذكور.",
+    ].join("\n");
+  }
   const seen = new Set<string>();
   const ranked = all
     .filter((r) => r.url && r.title && !seen.has(r.url) && seen.add(r.url))
@@ -187,7 +208,7 @@ export async function liveFactsBlock(
     .sort((a, b) => b.t - a.t);
   const dated = ranked.filter((x) => x.t > 0);
   const rows = (dated.length ? dated : ranked).slice(0, 8);
-  return [
+  const block = [
     "## حقائق لحظية — نتائج بحث حيّ وصلت قبل انتهاء المهلة",
     ...rows.map(
       ({ r, t }) =>
@@ -195,7 +216,8 @@ export async function liveFactsBlock(
     ),
     "اعتمد هذه النتائج كمصدر للأحداث الجارية، واذكر عمر كل خبر.",
   ].join("\n");
-
+  await snap.saveSnapshot("live", key, block);
+  return block;
 }
 
 /** المدن المذكورة صراحة في السؤال تتقدّم على مدينة العلامة (طقس/مواقيت). */
