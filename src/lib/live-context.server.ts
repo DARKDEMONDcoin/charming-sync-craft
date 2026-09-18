@@ -342,8 +342,12 @@ async function liveFactsInner(
       } catch {
         /* رابط غير قياسي */
       }
-      return `- ${r.title}${r.snippet ? ` — ${r.snippet}` : ""}${r.date ? ` [${r.date}]` : ""} (${host})`;
+      const t = temporal.parseStamp(r.date);
+      const age = t ? ` [${temporal.ageLabel(t)} — ${new Date(t).toISOString().slice(0, 16).replace("T", " ")}Z — ${temporal.freshnessTag(t)}]` : " [بلا تاريخ]";
+      return `- ${r.title}${r.snippet ? ` — ${r.snippet}` : ""}${age} (${host})`;
     }),
+    temporal.relativeBlock(message, opts.timeZone ?? "Asia/Riyadh"),
+    "كل دليل موسوم بعمره الحقيقي: «طازج» (أقل من ٢٤ ساعة) يُقدَّم كخبر الآن، «حديث» يُذكر بتاريخه، «قديم» لا يُقدَّم كجديد أبداً. اذكر عمر الخبر للمستخدم (مثلاً: «منذ ٣ ساعات»).",
     "اعتمد هذه النتائج حرفياً كمصدر وحيد لأي حدث جارٍ أو رقم أو سعر. أي رقم مذكور أعلاه (سعر صرف، عملة، حرارة، موعد) هو رقم رسمي مؤكد: اذكره صراحة مع مصدره وتاريخه بدل قول «لا يوجد رقم مؤكد». الامتناع لا يجوز إلا إذا كان الرقم غير موجود هنا فعلاً. إن تعارضت المصادر فاذكر الأرجح وقل إن التفاصيل قيد التأكيد. لا تضف أسماء أو أرقاماً غير موجودة هنا.",
   ].join("\n");
 }
