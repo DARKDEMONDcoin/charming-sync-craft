@@ -27,7 +27,7 @@ export async function saveSnapshot(kind: string, key: string, text: string): Pro
         { kind, key, payload: { text } as SnapshotPayload, captured_at: new Date().toISOString() },
         { onConflict: "kind,key" },
       );
-    if (res.error) console.error("snapshot save error", res.error.message);
+    console.error("[snap] save", kind, key, res.error ? res.error.message : "ok");
   } catch (e) {
     console.error("snapshot save failed", String(e));
   }
