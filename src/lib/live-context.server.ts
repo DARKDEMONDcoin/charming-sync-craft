@@ -210,9 +210,25 @@ export async function liveFactsBlock(
   // لو أسقطت التصفية كل شيء، نأخذ أفضل ما جاءت به مصادر الأخبار الخام (الأحدث زمنياً).
   if (!rows.length) rows = webResults.flatMap((r) => r.filter((x) => x.date).slice(0, 4));
   const seen = new Set<string>();
-  const unique = rows
-    .filter((r) => r.url && r.title && !seen.has(r.url) && seen.add(r.url))
-    .slice(0, 10);
+  let unique = rows.filter((r) => r.url && r.title && !seen.has(r.url) && seen.add(r.url));
+
+  // الحداثة أهم من الترتيب الأصلي: الأسئلة عن «الآن/اليوم/آخر» لا تُجاب بخبر عمره شهور.
+  const stamp = (r: LiveRow) => {
+    if (!r.date) return 0;
+    const iso = /^\d{14}$/.test(r.date)
+      ? `${r.date.slice(0, 4)}-${r.date.slice(4, 6)}-${r.date.slice(6, 8)}T${r.date.slice(8, 10)}:${r.date.slice(10, 12)}:00Z`
+      : r.date.replace(/^(\d{8})T(\d{6})Z$/, "$1T$2Z");
+    const t = Date.parse(iso);
+    return Number.isNaN(t) ? 0 : t;
+  };
+  const dated = unique.filter((r) => stamp(r) > 0).sort((a, b) => stamp(b) - stamp(a));
+  const undated = unique.filter((r) => stamp(r) === 0);
+  const wantsFresh = /اليوم|النهارده|النهاردة|الآن|الان|دلوقتي|عاجل|آخر|اخر|أحدث|احدث|أمس|امبارح/u.test(
+    message,
+  );
+  const cutoff = Date.now() - 14 * 86_400_000;
+  const fresh = dated.filter((r) => stamp(r) >= cutoff);
+  unique = [...(wantsFresh && fresh.length ? fresh : dated), ...undated].slice(0, 10);
 
   // 3) ويكيبيديا كملاذ أخير للحقائق الثابتة.
   if (!unique.length && left() > 2_500) {
