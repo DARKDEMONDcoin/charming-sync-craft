@@ -210,19 +210,21 @@ export async function liveFactsBlock(
 
   // 2) مصادر منظّمة حسب النيّة — إجابات قاطعة بأرقام حقيقية.
   const structuredTasks: Promise<string>[] = [];
-  if (intent.weather) structuredTasks.push(settled(sources.weatherFor(city, { ms: searchMs }), ""));
+  // كل نوع بيانات له سلسلة بدائل داخلية (مزوّد أول ثم ثانٍ ثم ثالث).
+  const extra = await import("./live-sources-extra.server");
+  if (intent.weather) structuredTasks.push(settled(extra.weatherAny(city, { ms: searchMs }), ""));
   if (intent.fx)
     structuredTasks.push(
       settled(
-        sources.fxRates("USD", [currencyForCountry(code), "EUR", "GBP", "SAR", "AED", "EGP"], {
+        extra.fxAny("USD", [currencyForCountry(code), "EUR", "GBP", "SAR", "AED", "EGP"], {
           ms: searchMs,
         }),
         "",
       ),
     );
-  if (intent.crypto) structuredTasks.push(settled(sources.cryptoPrices(undefined, { ms: searchMs }), ""));
+  if (intent.crypto) structuredTasks.push(settled(extra.cryptoAny(undefined, { ms: searchMs }), ""));
   if (intent.prayer)
-    structuredTasks.push(settled(sources.prayerTimes(city, place.country, { ms: searchMs }), ""));
+    structuredTasks.push(settled(extra.prayerAny(city, place.country, { ms: searchMs }), ""));
   if (intent.sports) {
     const team = teamNameIn(message);
     if (team) structuredTasks.push(settled(sources.teamMatches(team, { ms: searchMs }), ""));
