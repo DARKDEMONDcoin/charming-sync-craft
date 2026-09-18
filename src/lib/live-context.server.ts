@@ -247,7 +247,18 @@ export async function liveFactsBlock(
   const fresh = dated.filter((r) => stamp(r) >= cutoff);
   unique = [...(wantsFresh && fresh.length ? fresh : dated), ...undated].slice(0, 10);
 
-  // 3) ويكيبيديا كملاذ أخير للحقائق الثابتة.
+  // 3) محاولة ثانية للأخبار وحدها: تحت الحمل المتوازي تنتهي مهلة المصادر أحياناً،
+  //    وإعادة نداء واحد خفيف أرخص بكثير من إجابة «لم أجد مصدراً».
+  if (!unique.length && left() > 3_000) {
+    const retry = await settled(
+      sources.googleNewsSearch(q, { country: code, ms: Math.min(left(), 7_000) }),
+      [],
+    );
+    const relevant = relevantRows(retry, q);
+    unique.push(...(relevant.length ? relevant : retry).slice(0, 8));
+  }
+
+  // 4) ويكيبيديا كملاذ أخير للحقائق الثابتة.
   if (!unique.length && left() > 2_500) {
     const wiki = await settled(sources.wikipediaSearch(q, { ms: Math.min(left(), 6_000) }), []);
     unique.push(...relevantRows(wiki, q).slice(0, 5));
