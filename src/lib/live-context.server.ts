@@ -518,11 +518,21 @@ export async function ambientPulse(
   const rows = (await Promise.all(tasks)).flat();
   const seen = new Set<string>();
   const unique = rows.filter((r) => r.title && !seen.has(r.title) && seen.add(r.title)).slice(0, 8);
-  if (!unique.length) return "";
+  const snap = await import("./live-snapshot.server");
+  const pulseKey = `pulse:${code.toLowerCase()}`;
+  if (!unique.length) {
+    // لا نترك مهام الخلفية بلا وعي: آخر نبض محفوظ أفضل من لا شيء، بشرط ذكر عمره.
+    const last = await snap.readSnapshot("live", pulseKey, 12 * 60 * 60 * 1000);
+    if (!last) return "";
+    const temporalMod = await import("./temporal.server");
+    return `${last.text}\n(هذه آخر لقطة محفوظة ${temporalMod.ageLabel(last.capturedAt)} — المصادر لم تستجب الآن.)`;
+  }
   const f = nowFacts(opts.timeZone ?? "Asia/Riyadh");
-  return [
+  const block = [
     `## ما يحدث الآن في السوق (${f.iso} ${f.clock})`,
     ...unique.map((r) => `- ${r.title}${r.date ? ` [${r.date}]` : ""}`),
     "استخدمها فقط إن كانت ذات صلة بالعلامة، ولا تفتعل ربطاً.",
   ].join("\n");
+  void snap.saveSnapshot("live", pulseKey, block);
+  return block;
 }
