@@ -910,6 +910,27 @@ export type Database = {
           },
         ]
       }
+      live_snapshots: {
+        Row: {
+          captured_at: string
+          key: string
+          kind: string
+          payload: Json
+        }
+        Insert: {
+          captured_at?: string
+          key: string
+          kind: string
+          payload?: Json
+        }
+        Update: {
+          captured_at?: string
+          key?: string
+          kind?: string
+          payload?: Json
+        }
+        Relationships: []
+      }
       messages: {
         Row: {
           body: string
