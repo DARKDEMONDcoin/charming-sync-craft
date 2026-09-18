@@ -67,6 +67,21 @@ const cache = new Map<string, Entry>();
 const FRESH_MS = 3 * 60 * 1000;
 const STALE_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * مدة «الطزاجة» حسب تقلّب نوع البيانات لا حسب رقم واحد للجميع:
+ * الأسعار والأخبار تتغيّر كل دقائق، والطقس كل ربع ساعة، والأعياد والموسوعات كل يوم.
+ * هذا يمنع تقديم رقم قديم على أنه الآن، ويخفّف الضغط على المصادر المحدودة.
+ */
+function freshnessTtl(url: string): number {
+  const u = url.toLowerCase();
+  if (/coingecko|coinbase|binance|kraken|finance/.test(u)) return 60 * 1000; // أسعار لحظية
+  if (/news|rss|gdelt|lobste|mastodon|reddit|algolia/.test(u)) return 3 * 60 * 1000; // أخبار
+  if (/open-meteo|wttr|earthquake/.test(u)) return 10 * 60 * 1000; // طقس/زلازل
+  if (/frankfurter|er-api|exchangerate|currency-api/.test(u)) return 30 * 60 * 1000; // صرف يومي
+  if (/aladhan|nager|wikipedia|wikidata|dbpedia|restcountries/.test(u)) return 6 * 60 * 60 * 1000;
+  return FRESH_MS;
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export type FetchOptions = {
