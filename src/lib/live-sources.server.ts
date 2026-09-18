@@ -72,12 +72,15 @@ function parseRss(xml: string, source: string): LiveRow[] {
     .map((item) => {
       const pick = (tag: string) => {
         const m = item.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`));
-        return m ? strip(m[1]!.replace(/<!\[CDATA\[|\]\]>/g, "")) : "";
+        // وصف RSS يأتي غالباً بـ HTML مُرمَّز داخل CDATA: ننظّف مرتين حتى يبقى نص خالص.
+        return m ? strip(strip(m[1]!.replace(/<!\[CDATA\[|\]\]>/g, ""))) : "";
       };
+      const title = pick("title").slice(0, 200);
+      const description = pick("description");
       return {
-        title: pick("title").slice(0, 200),
+        title,
         url: (item.match(/<link[^>]*>([\s\S]*?)<\/link>/)?.[1] ?? "").trim(),
-        snippet: pick("description").slice(0, 280),
+        snippet: description.includes(title.slice(0, 40)) ? "" : description.slice(0, 280),
         date: pick("pubDate"),
         source,
       };
