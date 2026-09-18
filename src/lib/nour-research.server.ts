@@ -208,7 +208,7 @@ export async function freeChat(
   options: ChatOptions = {},
 ): Promise<string> {
   const { limitLlm } = await import("./limiter.server");
-  return limitLlm(() => freeChatInner(keyHint, messages, options));
+  return limitLlm(() => freeChatInner(keyHint, withNowAnchor(messages, options), options));
 }
 
 async function freeChatInner(
@@ -414,6 +414,7 @@ export async function freeChatStream(
       ? GEMINI_MODELS.map((model) => ({ endpoint: GEMINI, key: keys.gemini!, model }))
       : []),
   ];
+  messages = withNowAnchor(messages, options);
   let emitted = false;
   for (const attempt of tries) {
     try {
