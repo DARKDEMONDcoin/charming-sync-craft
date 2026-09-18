@@ -263,14 +263,17 @@ async function liveFactsInner(
       })(),
       [],
     ),
-    settled(
-      (async () => {
-        const world = await import("./live-sources-world.server");
-        return world.mastodonTag(q.split(/\s+/)[0] ?? "", { ms: Math.min(searchMs, 5_000) });
-      })(),
-      [],
-    ),
   );
+  if (intent.tech)
+    webTasks.push(
+      settled(
+        (async () => {
+          const world = await import("./live-sources-world.server");
+          return world.mastodonTag(q.split(/\s+/)[0] ?? "", { ms: Math.min(searchMs, 5_000) });
+        })(),
+        [],
+      ),
+    );
   // بدائل دائمة تعمل بالتوازي: لو حُجب محرك أو سقط مزوّد يبقى هناك من يجيب.
   webTasks.push(
     settled(
@@ -347,6 +350,18 @@ async function liveFactsInner(
   const temporal = await import("./temporal.server");
   const halfLife = temporal.halfLifeFor(message);
   const stamp = (r: LiveRow) => temporal.parseStamp(r.date);
+  const wantsFresh =
+    intent.news ||
+    /اليوم|النهارده|النهاردة|الآن|الان|دلوقتي|عاجل|آخر|اخر|أحدث|احدث|أمس|امبارح|٢٤ ساعة|24 ساعة/u.test(
+      message,
+    );
+  if (wantsFresh) {
+    // سؤال عن «الآن» لا يُجاب بخبر عمره شهور: نُسقط القديم صراحةً.
+    const cutoff = Date.now() - 14 * 86_400_000;
+    const fresh = unique.filter((r) => stamp(r) >= cutoff);
+    const undated = unique.filter((r) => stamp(r) === 0).slice(0, 3);
+    if (fresh.length) unique = [...fresh, ...undated];
+  }
   unique = unique
     .map((r) => ({ r, score: temporal.decayScore(stamp(r), halfLife) }))
     .sort((a, b) => b.score - a.score)
