@@ -82,7 +82,7 @@ function relevantRows(rows: LiveRow[], query: string): LiveRow[] {
 function intentOf(text: string) {
   return {
     news: /خبر|أخبار|اخبار|عاجل|حدث|ترند|news|انتخابات|قرار|إعلان|اعلان/u.test(text),
-    tech: /تقنية|تكنولوجيا|ذكاء اصطناعي|AI|إصدار|نسخة|تحديث|تطبيق|منصة|شركة|launch|startup/iu.test(
+    tech: /تقني|تكنولوج|ذكاء اصطناعي|AI|إصدار|نسخة|تحديث|تطبيق|منصة|شركة|هاتف|برمج|launch|startup/iu.test(
       text,
     ),
     weather: /الطقس|طقس|حرارة|مطر|جو|رطوبة|weather/u.test(text),
