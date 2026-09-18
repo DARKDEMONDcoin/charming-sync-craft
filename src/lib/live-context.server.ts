@@ -171,9 +171,22 @@ export async function liveFactsBlock(
   // سقف صارم: مهما تعثّرت المصادر أو تباطأت المرايا، الرد على المستخدم لا يتأخر.
   // ومع ذلك لا نرجع فارغين: ما وصل من أرقام رسمية قبل انتهاء المهلة يُسلَّم كما هو.
   const { withBudget } = await import("./net-resilience.server");
-  const partial = { text: "" };
+  const partial: { text: string; rows?: LiveRow[] } = { text: "", rows: [] };
   const out = await withBudget(liveFactsInner(message, budgetMs, opts, partial), budgetMs + 2_000, "");
-  return out || partial.text;
+  if (out) return out;
+  if (partial.text) return partial.text;
+  // انتهت المهلة قبل الترتيب النهائي: نسلّم ما وصل فعلاً بدل الصمت.
+  const rows = (partial.rows ?? []).slice(0, 8);
+  if (!rows.length) return "";
+  const temporal = await import("./temporal.server");
+  return [
+    "## حقائق لحظية — نتائج بحث حيّ وصلت قبل انتهاء المهلة",
+    ...rows.map((r) => {
+      const t = temporal.parseStamp(r.date);
+      return `- ${r.title}${r.snippet ? ` — ${r.snippet}` : ""}${t ? ` [${temporal.ageLabel(t)}]` : ""} (${r.source})`;
+    }),
+    "اعتمد هذه النتائج كمصدر للأحداث الجارية، واذكر عمر كل خبر.",
+  ].join("\n");
 }
 
 /** المدن المذكورة صراحة في السؤال تتقدّم على مدينة العلامة (طقس/مواقيت). */
@@ -201,7 +214,7 @@ async function liveFactsInner(
   message: string,
   budgetMs: number,
   opts: LiveOptions,
-  partial: { text: string } = { text: "" },
+  partial: { text: string; rows?: LiveRow[] } = { text: "" },
 ): Promise<string> {
   const q = queryOf(message);
   if (!q) return "";
@@ -313,7 +326,15 @@ async function liveFactsInner(
     }
     return list;
   });
-  const [webResults, structured] = await Promise.all([Promise.all(webTasks), structuredP]);
+  // كل ما يصل من نتائج يُسجَّل فوراً: لو انتهت المهلة قبل اكتمال الكل نسلّم ما وصل.
+  const bag: LiveRow[] = (partial.rows ??= []);
+  const tracked = webTasks.map((p) =>
+    p.then((rows) => {
+      for (const r of rows) if (r?.url && r?.title) bag.push(r);
+      return rows;
+    }),
+  );
+  const [webResults, structured] = await Promise.all([Promise.all(tracked), structuredP]);
 
   let rows = webResults.flatMap((r) => relevantRows(r, q).slice(0, 6));
   // لو أسقطت التصفية كل شيء، نأخذ أفضل ما جاءت به مصادر الأخبار الخام (الأحدث زمنياً).
