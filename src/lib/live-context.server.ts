@@ -287,23 +287,16 @@ async function liveFactsInner(
   const seen = new Set<string>();
   let unique = rows.filter((r) => r.url && r.title && !seen.has(r.url) && seen.add(r.url));
 
-  // الحداثة أهم من الترتيب الأصلي: الأسئلة عن «الآن/اليوم/آخر» لا تُجاب بخبر عمره شهور.
-  const stamp = (r: LiveRow) => {
-    if (!r.date) return 0;
-    const iso = /^\d{14}$/.test(r.date)
-      ? `${r.date.slice(0, 4)}-${r.date.slice(4, 6)}-${r.date.slice(6, 8)}T${r.date.slice(8, 10)}:${r.date.slice(10, 12)}:00Z`
-      : r.date.replace(/^(\d{8})T(\d{6})Z$/, "$1T$2Z");
-    const t = Date.parse(iso);
-    return Number.isNaN(t) ? 0 : t;
-  };
-  const dated = unique.filter((r) => stamp(r) > 0).sort((a, b) => stamp(b) - stamp(a));
-  const undated = unique.filter((r) => stamp(r) === 0);
-  const wantsFresh = /اليوم|النهارده|النهاردة|الآن|الان|دلوقتي|عاجل|آخر|اخر|أحدث|احدث|أمس|امبارح/u.test(
-    message,
-  );
-  const cutoff = Date.now() - 14 * 86_400_000;
-  const fresh = dated.filter((r) => stamp(r) >= cutoff);
-  unique = [...(wantsFresh && fresh.length ? fresh : dated), ...undated].slice(0, 10);
+  // ترتيب بانحدار زمني أُسّي: خبر عمره ساعتان يسبق خبراً عمره شهر، ونصف العمر
+  // يتغيّر حسب صيغة السؤال («عاجل» ≠ «هذا الشهر»).
+  const temporal = await import("./temporal.server");
+  const halfLife = temporal.halfLifeFor(message);
+  const stamp = (r: LiveRow) => temporal.parseStamp(r.date);
+  unique = unique
+    .map((r) => ({ r, score: temporal.decayScore(stamp(r), halfLife) }))
+    .sort((a, b) => b.score - a.score)
+    .map((x) => x.r)
+    .slice(0, 10);
 
   // 3) محاولة ثانية للأخبار وحدها: تحت الحمل المتوازي تنتهي مهلة المصادر أحياناً،
   //    وإعادة نداء واحد خفيف أرخص بكثير من إجابة «لم أجد مصدراً».
@@ -349,10 +342,16 @@ async function liveFactsInner(
       } catch {
         /* رابط غير قياسي */
       }
-      return `- ${r.title}${r.snippet ? ` — ${r.snippet}` : ""}${r.date ? ` [${r.date}]` : ""} (${host})`;
+      const t = temporal.parseStamp(r.date);
+      const age = t ? ` [${temporal.ageLabel(t)} — ${new Date(t).toISOString().slice(0, 16).replace("T", " ")}Z — ${temporal.freshnessTag(t)}]` : " [بلا تاريخ]";
+      return `- ${r.title}${r.snippet ? ` — ${r.snippet}` : ""}${age} (${host})`;
     }),
+    temporal.relativeBlock(message, opts.timeZone ?? "Asia/Riyadh"),
+    "كل دليل موسوم بعمره الحقيقي: «طازج» (أقل من ٢٤ ساعة) يُقدَّم كخبر الآن، «حديث» يُذكر بتاريخه، «قديم» لا يُقدَّم كجديد أبداً. اذكر عمر الخبر للمستخدم (مثلاً: «منذ ٣ ساعات»).",
     "اعتمد هذه النتائج حرفياً كمصدر وحيد لأي حدث جارٍ أو رقم أو سعر. أي رقم مذكور أعلاه (سعر صرف، عملة، حرارة، موعد) هو رقم رسمي مؤكد: اذكره صراحة مع مصدره وتاريخه بدل قول «لا يوجد رقم مؤكد». الامتناع لا يجوز إلا إذا كان الرقم غير موجود هنا فعلاً. إن تعارضت المصادر فاذكر الأرجح وقل إن التفاصيل قيد التأكيد. لا تضف أسماء أو أرقاماً غير موجودة هنا.",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 /** لقطة «ما الذي يحدث الآن» لمهام الخلفية (البريفنج/الأوتوبايلوت) بلا سؤال محدد. */
