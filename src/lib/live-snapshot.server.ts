@@ -27,8 +27,8 @@ export async function saveSnapshot(kind: string, key: string, text: string): Pro
         { kind, key, payload: { text } as SnapshotPayload, captured_at: new Date().toISOString() },
         { onConflict: "kind,key" },
       );
-  } catch {
-    /* الحفظ مجرد احتياط: فشله لا يؤثر على المستخدم */
+  } catch (e) {
+    console.error("snapshot save failed", String(e));
   }
 }
 
@@ -65,7 +65,7 @@ export async function readSnapshot(
     const text = row.payload?.text ?? "";
     if (!text.trim()) return null;
     return { text, capturedAt, ageMs };
-  } catch {
+  } catch (e) {
     return null;
   }
 }
