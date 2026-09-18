@@ -361,7 +361,8 @@ export function analyzeStyle(text: string, taglines: string[] = []): StyleStats 
   const second = dialectScores[1]!;
   const total = dialectScores.reduce((a, b) => a + b.score, 0) || 1;
   let dialect: StyleStats["dialect"] = top.score === 0 ? "msa" : top.d;
-  const conf = top.score / total;
+  // غياب أي مؤشر عامية دليل معقول على الفصحى، فلا تكون الثقة صفراً
+  const conf = top.score === 0 ? 0.6 : top.score / total;
   if (
     top.d !== "msa" &&
     second.d !== "msa" &&
