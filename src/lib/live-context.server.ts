@@ -168,14 +168,50 @@ export async function liveFactsBlock(
   budgetMs = 13_000,
   opts: LiveOptions = {},
 ): Promise<string> {
+  // سقف صارم: مهما تعثّرت المصادر أو تباطأت المرايا، الرد على المستخدم لا يتأخر.
+  // ومع ذلك لا نرجع فارغين: ما وصل من أرقام رسمية قبل انتهاء المهلة يُسلَّم كما هو.
+  const { withBudget } = await import("./net-resilience.server");
+  const partial = { text: "" };
+  const out = await withBudget(liveFactsInner(message, budgetMs, opts, partial), budgetMs + 2_000, "");
+  return out || partial.text;
+}
+
+/** المدن المذكورة صراحة في السؤال تتقدّم على مدينة العلامة (طقس/مواقيت). */
+const CITY_HINTS: Record<string, { city: string; country: string }> = {
+  "القاهرة": { city: "Cairo", country: "Egypt" },
+  "الإسكندرية": { city: "Alexandria", country: "Egypt" },
+  "الرياض": { city: "Riyadh", country: "Saudi Arabia" },
+  "جدة": { city: "Jeddah", country: "Saudi Arabia" },
+  "مكة": { city: "Mecca", country: "Saudi Arabia" },
+  "المدينة": { city: "Medina", country: "Saudi Arabia" },
+  "دبي": { city: "Dubai", country: "United Arab Emirates" },
+  "أبوظبي": { city: "Abu Dhabi", country: "United Arab Emirates" },
+  "الدوحة": { city: "Doha", country: "Qatar" },
+  "الكويت": { city: "Kuwait City", country: "Kuwait" },
+  "عمّان": { city: "Amman", country: "Jordan" },
+  "بغداد": { city: "Baghdad", country: "Iraq" },
+  "بيروت": { city: "Beirut", country: "Lebanon" },
+  "الدار البيضاء": { city: "Casablanca", country: "Morocco" },
+  "تونس": { city: "Tunis", country: "Tunisia" },
+  "الجزائر": { city: "Algiers", country: "Algeria" },
+  "الخرطوم": { city: "Khartoum", country: "Sudan" },
+};
+
+async function liveFactsInner(
+  message: string,
+  budgetMs: number,
+  opts: LiveOptions,
+  partial: { text: string } = { text: "" },
+): Promise<string> {
   const q = queryOf(message);
   if (!q) return "";
   const started = Date.now();
   const left = () => budgetMs - (Date.now() - started);
   const intent = intentOf(message);
   const code = (opts.country ?? "EG").toUpperCase();
-  const place = COUNTRY_CITY[code] ?? COUNTRY_CITY["EG"]!;
-  const city = opts.city?.trim() || place.city;
+  const hinted = Object.entries(CITY_HINTS).find(([name]) => message.includes(name))?.[1];
+  const place = hinted ?? COUNTRY_CITY[code] ?? COUNTRY_CITY["EG"]!;
+  const city = hinted?.city || opts.city?.trim() || place.city;
 
   const sources = await import("./live-sources.server");
   const searchMs = Math.min(Math.max(left() - 1_500, 4_000), 10_000);
@@ -197,31 +233,53 @@ export async function liveFactsBlock(
       settled(sources.gdeltNews(q, { ms: searchMs }), []),
     );
   if (intent.tech) webTasks.push(settled(sources.hackerNewsSearch(q, { ms: searchMs }), []));
+  // بدائل دائمة تعمل بالتوازي: لو حُجب محرك أو سقط مزوّد يبقى هناك من يجيب.
+  webTasks.push(
+    settled(
+      (async () => {
+        const extra = await import("./live-sources-extra.server");
+        return extra.backupWebSearch(q, { ms: searchMs });
+      })(),
+      [],
+    ),
+  );
 
   // 2) مصادر منظّمة حسب النيّة — إجابات قاطعة بأرقام حقيقية.
   const structuredTasks: Promise<string>[] = [];
-  if (intent.weather) structuredTasks.push(settled(sources.weatherFor(city, { ms: searchMs }), ""));
+  // كل نوع بيانات له سلسلة بدائل داخلية (مزوّد أول ثم ثانٍ ثم ثالث).
+  const extra = await import("./live-sources-extra.server");
+  if (intent.weather) structuredTasks.push(settled(extra.weatherAny(city, { ms: searchMs }), ""));
   if (intent.fx)
     structuredTasks.push(
       settled(
-        sources.fxRates("USD", [currencyForCountry(code), "EUR", "GBP", "SAR", "AED", "EGP"], {
+        extra.fxAny("USD", [currencyForCountry(code), "EUR", "GBP", "SAR", "AED", "EGP"], {
           ms: searchMs,
         }),
         "",
       ),
     );
-  if (intent.crypto) structuredTasks.push(settled(sources.cryptoPrices(undefined, { ms: searchMs }), ""));
+  if (intent.crypto) structuredTasks.push(settled(extra.cryptoAny(undefined, { ms: searchMs }), ""));
   if (intent.prayer)
-    structuredTasks.push(settled(sources.prayerTimes(city, place.country, { ms: searchMs }), ""));
+    structuredTasks.push(settled(extra.prayerAny(city, place.country, { ms: searchMs }), ""));
   if (intent.sports) {
     const team = teamNameIn(message);
     if (team) structuredTasks.push(settled(sources.teamMatches(team, { ms: searchMs }), ""));
   }
 
-  const [webResults, structured] = await Promise.all([
-    Promise.all(webTasks),
-    Promise.all(structuredTasks),
-  ]);
+  // الأرقام الرسمية تصل عادة قبل نتائج البحث: نسجّلها فوراً كنسخة احتياطية جاهزة.
+  const structuredP = Promise.all(structuredTasks).then((list) => {
+    const ready = list.filter(Boolean);
+    if (ready.length) {
+      const nf = nowFacts(opts.timeZone ?? "Asia/Riyadh");
+      partial.text = [
+        `## حقائق لحظية — أرقام رسمية مؤكدة (${nf.iso} ${nf.clock} ${nf.timeZone}) عن «${q}»`,
+        ...ready.map((s) => `- ${s}`),
+        "اذكر هذه الأرقام صراحة مع مصدرها وتاريخها. لا تضف أرقاماً غير موجودة هنا.",
+      ].join("\n");
+    }
+    return list;
+  });
+  const [webResults, structured] = await Promise.all([Promise.all(webTasks), structuredP]);
 
   let rows = webResults.flatMap((r) => relevantRows(r, q).slice(0, 6));
   // لو أسقطت التصفية كل شيء، نأخذ أفضل ما جاءت به مصادر الأخبار الخام (الأحدث زمنياً).
@@ -264,6 +322,13 @@ export async function liveFactsBlock(
     unique.push(...relevantRows(wiki, q).slice(0, 5));
   }
 
+  // 5) الضمانة الأخيرة: خلاصات إخبارية مباشرة (بلا محرك بحث إطلاقاً).
+  if (!unique.length && left() > 2_000) {
+    const feeds = await settled(extra.arabicFeeds({ ms: Math.min(left(), 6_000) }), []);
+    const relevant = relevantRows(feeds, q);
+    unique.push(...(relevant.length ? relevant : feeds.slice(0, 5)).slice(0, 6));
+  }
+
   const facts = structured.filter(Boolean);
   const f = nowFacts(opts.timeZone ?? "Asia/Riyadh");
 
@@ -286,7 +351,7 @@ export async function liveFactsBlock(
       }
       return `- ${r.title}${r.snippet ? ` — ${r.snippet}` : ""}${r.date ? ` [${r.date}]` : ""} (${host})`;
     }),
-    "اعتمد هذه النتائج حرفياً كمصدر وحيد لأي حدث جارٍ أو رقم أو سعر. إن تعارضت المصادر فاذكر الأرجح وقل إن التفاصيل قيد التأكيد. لا تضف أسماء أو أرقاماً غير موجودة هنا.",
+    "اعتمد هذه النتائج حرفياً كمصدر وحيد لأي حدث جارٍ أو رقم أو سعر. أي رقم مذكور أعلاه (سعر صرف، عملة، حرارة، موعد) هو رقم رسمي مؤكد: اذكره صراحة مع مصدره وتاريخه بدل قول «لا يوجد رقم مؤكد». الامتناع لا يجوز إلا إذا كان الرقم غير موجود هنا فعلاً. إن تعارضت المصادر فاذكر الأرجح وقل إن التفاصيل قيد التأكيد. لا تضف أسماء أو أرقاماً غير موجودة هنا.",
   ].join("\n");
 }
 
@@ -297,8 +362,11 @@ export async function ambientPulse(
 ): Promise<string> {
   const code = (opts.country ?? "EG").toUpperCase();
   const sources = await import("./live-sources.server");
+  const extra = await import("./live-sources-extra.server");
   const tasks: Promise<LiveRow[]>[] = [
     settled(sources.googleNewsTop({ country: code, ms: budgetMs }), []),
+    // بديل مباشر بلا محرك بحث، يعمل حتى لو سقطت أخبار جوجل.
+    settled(extra.arabicFeeds({ ms: budgetMs, limit: 12 }), []),
     ...(opts.topics ?? [])
       .slice(0, 2)
       .map((t) => settled(sources.googleNewsSearch(t, { country: code, ms: budgetMs }), [])),

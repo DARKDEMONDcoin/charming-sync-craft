@@ -14,13 +14,10 @@ export type LiveRow = { title: string; url: string; snippet: string; source: str
 const UA =
   "Mozilla/5.0 (X11; Linux x86_64; rv:127.0) Gecko/20100101 Firefox/127.0 (+sahl-live-context)";
 
+// كل نداء يمرّ بطبقة الصمود: إعادة محاولة + مرايا قراءة عامة + ذاكرة مؤقتة.
 async function getText(url: string, ms: number, headers: Record<string, string> = {}) {
-  const res = await fetch(url, {
-    headers: { "User-Agent": UA, "Accept-Language": "ar,en;q=0.8", ...headers },
-    signal: AbortSignal.timeout(ms),
-  });
-  if (!res.ok) throw new Error(`${res.status}`);
-  return res.text();
+  const { resilientText } = await import("./net-resilience.server");
+  return resilientText(url, { ms, headers: { "User-Agent": UA, ...headers } });
 }
 
 async function getJson<T>(url: string, ms: number, headers: Record<string, string> = {}) {
