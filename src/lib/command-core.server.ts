@@ -87,7 +87,7 @@ async function draftPost(
 
   const timeZone = timezoneForCountry(ws?.country);
   const liveFacts = needsLiveFacts(request)
-    ? await liveFactsBlock(request, 13_000, { country: ws?.country ?? null, timeZone })
+    ? await liveFactsBlock(request, 20_000, { country: ws?.country ?? null, timeZone })
     : "";
   const system = [
     "أنت سِراج، مدير سوشيال ميديا عربي محترف.",
