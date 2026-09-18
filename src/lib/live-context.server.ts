@@ -354,19 +354,26 @@ async function liveFactsInner(
   });
   // كل ما يصل من نتائج يُسجَّل فوراً: لو انتهت المهلة قبل اكتمال الكل نسلّم ما وصل.
   const bag: LiveRow[] = (partial.rows ??= []);
-  const tracked = webTasks.map((p) =>
+  const track = (p: Promise<LiveRow[]>) =>
     p.then((rows) => {
       for (const r of rows) if (r?.url && r?.title) bag.push(r);
       return rows;
-    }),
-  );
-  const [webResults, structured] = await Promise.all([Promise.all(tracked), structuredP]);
+    });
+  const tracked = webTasks.map(track);
+  const trackedTopical = topicalTasks.map(track);
+  const [webResults, topicalResults, structured] = await Promise.all([
+    Promise.all(tracked),
+    Promise.all(trackedTopical),
+    structuredP,
+  ]);
 
-  let rows = generic
-    ? webResults.flatMap((r) => r.slice(0, 6))
-    : webResults.flatMap((r) => relevantRows(r, q).slice(0, 6));
+  let rows = [
+    ...webResults.flatMap((r) => relevantRows(r, q).slice(0, 6)),
+    ...topicalResults.flatMap((r) => r.slice(0, 6)),
+  ];
   // لو أسقطت التصفية كل شيء، نأخذ أفضل ما جاءت به مصادر الأخبار الخام (الأحدث زمنياً).
   if (!rows.length) rows = webResults.flatMap((r) => r.filter((x) => x.date).slice(0, 4));
+
   const seen = new Set<string>();
   let unique = rows.filter((r) => r.url && r.title && !seen.has(r.url) && seen.add(r.url));
 
