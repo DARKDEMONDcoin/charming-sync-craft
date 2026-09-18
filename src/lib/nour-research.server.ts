@@ -8,6 +8,7 @@ import {
   contentBrief,
   type SerpResult,
 } from "./seo-research.server";
+import { nowAnchorLine } from "./time-awareness.server";
 import { gscSnapshotFor } from "./gsc.functions";
 import { ga4SnapshotFor } from "./ga4.functions";
 
