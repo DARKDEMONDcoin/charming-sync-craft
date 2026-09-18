@@ -13,6 +13,7 @@ import { memoryBlock } from "./memory.server";
 import { actionTruthRules, sanitizeActionClaims } from "./action-claims";
 import { sharedSystemBlocks } from "./team-knowledge";
 import { playbookFor } from "./playbooks";
+import { ambientPulse, nowBlock, timezoneForCountry } from "./live-context.server";
 
 export type Client = SupabaseClient<Database>;
 
@@ -835,6 +836,20 @@ export async function executeSkill(
     website?: string | null;
     country?: string | null;
   };
+  const timeZone = timezoneForCountry(ws.country);
+  let worldPulse = "";
+  try {
+    worldPulse = await ambientPulse(
+      {
+        country: ws.country,
+        timeZone,
+        topics: [workspace.industry, skill.title, ...Object.values(values)].filter(Boolean),
+      },
+      9_000,
+    );
+  } catch (error) {
+    console.warn("[live] ambient pulse skipped:", error instanceof Error ? error.message : error);
+  }
   let learning = { block: "", lessonIds: [] as string[] };
   try {
     const { learningBlock } = await import("./learning.server");
@@ -846,6 +861,7 @@ export async function executeSkill(
     `أنت ${persona.name}، ${persona.role}`,
     `تعمل داخل منصة «سهل» لصالح العلامة: ${workspace.name} (${workspace.industry}).`,
     `نبرة العلامة: ${workspace.tone}.`,
+    nowBlock(timeZone, ws.country),
     `تاريخ اليوم: ${todayAr} (${today.toISOString().slice(0, 10)}). استخدم هذا التاريخ في أي جدول زمني أو تقويم أو إشارة زمنية، ولا تفترض سنة أقدم.`,
     workspace.banned_words?.length
       ? `كلمات ممنوعة تماماً: ${workspace.banned_words.join("، ")}.`
@@ -874,6 +890,7 @@ export async function executeSkill(
     live.block
       ? `## بيانات حسابات العلامة (حيّة الآن)\n${live.block}\n\nاعتمد على هذه البيانات الحقيقية في القرارات والأولويات والأسماء والمواعيد، ولا تخترع غيرها.`
       : "",
+    worldPulse,
 
     "أنت تنفّذ الآن مهمة محددة وتسلّم مخرجاً نهائياً جاهزاً للاستخدام — لا أسئلة ولا مقدمات ولا اعتذارات.",
     // النموذج يميل لفتح المخرج بقائمة «بيانات ناقصة» — وهذا يفسد التسليم.
@@ -900,6 +917,7 @@ export async function executeSkill(
     freeChat(apiKey, messages as Parameters<typeof freeChat>[1], {
       timeoutMs: long ? 150_000 : 55_000,
       maxTokens: long ? 8000 : 3600,
+      timeZone,
     });
 
   let output = (

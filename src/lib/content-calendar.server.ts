@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/integrations/supabase/types";
+import { ambientPulse, timezoneForCountry } from "./live-context.server";
 import { craft, personas } from "./nour-run.server";
 import { memoryBlock } from "./memory.server";
 import { adaptForProvider } from "./post-format";
@@ -308,7 +309,14 @@ export async function planCalendar(
     .slice(0, 15);
 
   const dialect = await resolveDialect(admin, input.workspaceId, input.dialect);
-  const system = systemFor(ctx, dialect, input.topic ?? ctx.ws.industry);
+  const timeZone = timezoneForCountry(ctx.ws.country);
+  const pulse = await ambientPulse(
+    { country: ctx.ws.country, timeZone, topics: [input.topic ?? ctx.ws.industry] },
+    9_000,
+  ).catch(() => "");
+  const system = [systemFor(ctx, dialect, input.topic ?? ctx.ws.industry), pulse]
+    .filter(Boolean)
+    .join("\n\n");
   const user = [
     `خطّط ${slots.length} فكرة منشور لتقويم محتوى ${input.days} يوماً على: ${input.providers.join("، ")}.`,
     input.topic
@@ -331,6 +339,7 @@ export async function planCalendar(
       json: true,
       timeoutMs: 60_000,
       maxTokens: 3500,
+      timeZone,
     },
   );
   let ideas = extractJsonList<PostMeta>(raw, "title");
@@ -348,7 +357,7 @@ export async function planCalendar(
             content: `ممتاز. أكمل ${slots.length - ideas.length} فكرة إضافية مختلفة تماماً عن السابقة بنفس الشكل {"items":[...]}.`,
           },
         ],
-        { json: true, timeoutMs: 60_000, maxTokens: 3500 },
+        { json: true, timeoutMs: 60_000, maxTokens: 3500, timeZone },
       );
       ideas = [...ideas, ...extractJsonList<PostMeta>(more, "title")];
     } catch (e) {
@@ -407,6 +416,7 @@ export async function generateCalendarPost(
   const { freeChat } = await import("./nour-research.server");
 
   const dialect = await resolveDialect(admin, workspaceId, opts.dialect);
+  const timeZone = timezoneForCountry(ctx.ws.country);
   const system = systemFor(ctx, dialect, meta.title ?? post.body);
   const user = [
     `اكتب المنشور النهائي لمنصة ${post.provider}.`,
@@ -436,6 +446,7 @@ export async function generateCalendarPost(
       json: true,
       timeoutMs: 60_000,
       maxTokens: 1400,
+      timeZone,
     },
   );
   const out = extractJson<{ caption?: string; image_prompt?: string }>(raw);
@@ -699,21 +710,26 @@ export async function dailyIdeas(
   const ctx = await workspaceContext(admin, workspaceId);
   const dialect = await resolveDialect(admin, workspaceId, dialectHint);
   const { freeChat } = await import("./nour-research.server");
-  const day = new Date().toLocaleDateString("ar-EG", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
+  const timeZone = timezoneForCountry(ctx.ws.country);
+  const { nowFacts } = await import("./time-awareness.server");
+  const day = nowFacts(timeZone).long;
+  const pulse = await ambientPulse(
+    { country: ctx.ws.country, timeZone, topics: [ctx.ws.industry] },
+    9_000,
+  ).catch(() => "");
   const raw = await freeChat(
     "",
     [
-      { role: "system", content: systemFor(ctx, dialect, ctx.ws.industry) },
+      {
+        role: "system",
+        content: [systemFor(ctx, dialect, ctx.ws.industry), pulse].filter(Boolean).join("\n\n"),
+      },
       {
         role: "user",
         content: `اليوم ${day}. اقترح 3 أفكار منشورات قابلة للنشر اليوم لهذه العلامة (مختلفة الأعمدة، مرتبطة بالموسم/اليوم إن أمكن). أخرج JSON فقط بهذا الشكل بالضبط (كائن فيه مصفوفة من 3 عناصر): {"ideas":[{"title":"…","hook":"أول سطر ≤ 12 كلمة","provider":"instagram|facebook|linkedin|x|tiktok"},{…},{…}]}`,
       },
     ],
-    { json: true, timeoutMs: 40_000, maxTokens: 600 },
+    { json: true, timeoutMs: 40_000, maxTokens: 600, timeZone },
   );
   type Idea = { title: string; hook: string; provider: string };
   const ideas: Idea[] = extractJsonList<Idea>(raw, "title");

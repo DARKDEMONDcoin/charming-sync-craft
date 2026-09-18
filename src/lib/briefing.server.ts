@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/integrations/supabase/types";
+import { timezoneForCountry } from "./time-awareness.server";
 
 type Admin = SupabaseClient<Database>;
 
@@ -60,7 +61,7 @@ export async function buildBriefing(admin: Admin, workspaceId: string): Promise<
     .select("timezone, dialect")
     .eq("workspace_id", workspaceId)
     .maybeSingle();
-  const tz = auto?.timezone ?? "Asia/Riyadh";
+  const tz = auto?.timezone ?? timezoneForCountry((ws as { country?: string | null }).country);
   const day = todayIso(tz);
   const dayStart = new Date(`${day}T00:00:00`);
   const dayEnd = new Date(dayStart.getTime() + 86_400_000);
