@@ -267,7 +267,6 @@ export async function liveFactsBlock(
   const facts = structured.filter(Boolean);
   const f = nowFacts(opts.timeZone ?? "Asia/Riyadh");
 
-  console.info("[live] q=", q, "rows=", unique.length, "facts=", facts.length, "ms=", Date.now() - started);
   if (!unique.length && !facts.length)
     return [
       "## حقائق لحظية",
