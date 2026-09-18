@@ -21,12 +21,13 @@ export async function saveSnapshot(kind: string, key: string, text: string): Pro
   if (!text.trim()) return;
   try {
     const db = await admin();
-    await db
+    const res = await db
       .from("live_snapshots")
       .upsert(
         { kind, key, payload: { text } as SnapshotPayload, captured_at: new Date().toISOString() },
         { onConflict: "kind,key" },
       );
+    if (res.error) console.error("snapshot save error", res.error.message);
   } catch (e) {
     console.error("snapshot save failed", String(e));
   }
@@ -65,7 +66,7 @@ export async function readSnapshot(
     const text = row.payload?.text ?? "";
     if (!text.trim()) return null;
     return { text, capturedAt, ageMs };
-  } catch (e) {
+  } catch {
     return null;
   }
 }
