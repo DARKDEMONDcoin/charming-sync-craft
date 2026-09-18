@@ -495,7 +495,7 @@ async function liveFactsInner(
     .join("\n");
 
   // نجاح الآن = احتياط الغد: نحفظ اللقطة بلا انتظار حتى لا تتأخر الإجابة.
-  void snap.saveSnapshot("live", snapKey, block);
+  await snap.saveSnapshot("live", snapKey, block);
   return block;
 }
 
