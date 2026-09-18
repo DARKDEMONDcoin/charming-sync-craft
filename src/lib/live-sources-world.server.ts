@@ -49,11 +49,12 @@ export async function mastodonTag(tag: string, { ms = 6_000 } = {}): Promise<Liv
   const hosts = ["mastodon.social", "mstdn.social", "fosstodon.org"];
   const slug = encodeURIComponent(tag.replace(/[^\p{L}\p{N}]/gu, "").slice(0, 40));
   if (!slug) return [];
+  const each = Math.max(1_500, Math.floor(ms / hosts.length));
   for (const host of hosts) {
     try {
       const rows = await jsonOf<
         { content: string; url: string; created_at: string; account?: { acct?: string } }[]
-      >(`https://${host}/api/v1/timelines/tag/${slug}?limit=10`, ms);
+      >(`https://${host}/api/v1/timelines/tag/${slug}?limit=10`, each);
       const out = rows
         .map((r) => ({
           title: clean(r.content).slice(0, 140),
@@ -74,11 +75,12 @@ export async function mastodonTag(tag: string, { ms = 6_000 } = {}): Promise<Liv
 /** LibreY — واجهة بحث مفتوحة المصدر بنتائج JSON، بديل إضافي عند حجب غيرها. */
 export async function libreySearch(query: string, { ms = 7_000 } = {}): Promise<LiveRow[]> {
   const hosts = ["libre.whateveritworks.org", "search.davidovski.xyz", "librey.org"];
+  const each = Math.max(1_500, Math.floor(ms / hosts.length));
   for (const host of hosts) {
     try {
       const rows = await jsonOf<{ title: string; url: string; description: string }[]>(
         `https://${host}/api.php?q=${encodeURIComponent(query)}&p=0`,
-        ms,
+        each,
       );
       const out = (Array.isArray(rows) ? rows : [])
         .filter((r) => r?.title && r?.url)
