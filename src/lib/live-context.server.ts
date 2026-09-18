@@ -392,6 +392,13 @@ async function liveFactsInner(
     const undated = unique.filter((r) => stamp(r) === 0).slice(0, 3);
     if (fresh.length) unique = [...fresh, ...undated];
   }
+  const TECH_HOST =
+    /arstechnica|techcrunch|theverge|engadget|ycombinator|lobste|wired|zdnet|aitnews|tech|ghacks|9to5|android|apple/i;
+  if (intent.tech) {
+    // سؤال تقني لا يُجاب بعناوين سياسية: نُقدّم مصادر التقنية إن وُجدت.
+    const techRows = unique.filter((r) => TECH_HOST.test(r.url) || TECH_HOST.test(r.source));
+    if (techRows.length >= 3) unique = techRows;
+  }
   unique = unique
     .map((r) => ({ r, score: temporal.decayScore(stamp(r), halfLife) }))
     .sort((a, b) => b.score - a.score)
