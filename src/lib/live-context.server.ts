@@ -266,10 +266,20 @@ async function liveFactsInner(
     if (team) structuredTasks.push(settled(sources.teamMatches(team, { ms: searchMs }), ""));
   }
 
-  const [webResults, structured] = await Promise.all([
-    Promise.all(webTasks),
-    Promise.all(structuredTasks),
-  ]);
+  // الأرقام الرسمية تصل عادة قبل نتائج البحث: نسجّلها فوراً كنسخة احتياطية جاهزة.
+  const structuredP = Promise.all(structuredTasks).then((list) => {
+    const ready = list.filter(Boolean);
+    if (ready.length) {
+      const nf = nowFacts(opts.timeZone ?? "Asia/Riyadh");
+      partial.text = [
+        `## حقائق لحظية — أرقام رسمية مؤكدة (${nf.iso} ${nf.clock} ${nf.timeZone}) عن «${q}»`,
+        ...ready.map((s) => `- ${s}`),
+        "اذكر هذه الأرقام صراحة مع مصدرها وتاريخها. لا تضف أرقاماً غير موجودة هنا.",
+      ].join("\n");
+    }
+    return list;
+  });
+  const [webResults, structured] = await Promise.all([Promise.all(webTasks), structuredP]);
 
   let rows = webResults.flatMap((r) => relevantRows(r, q).slice(0, 6));
   // لو أسقطت التصفية كل شيء، نأخذ أفضل ما جاءت به مصادر الأخبار الخام (الأحدث زمنياً).
