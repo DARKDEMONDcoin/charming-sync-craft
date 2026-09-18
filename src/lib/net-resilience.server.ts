@@ -108,26 +108,32 @@ export async function resilientText(url: string, opts: FetchOptions = {}): Promi
     return body;
   };
 
+  // «ms» هو الميزانية الكلية للنداء كله (محاولات + مرايا) حتى لا تتجاوز
+  // سلسلة البدائل السقف الزمني الذي يعتمد عليه المتصل.
+  const deadline = Date.now() + ms;
+  const remaining = () => deadline - Date.now();
+
   if (hostHealthy(url)) {
-    for (let i = 0; i < attempts; i++) {
+    for (let i = 0; i < attempts && remaining() > 900; i++) {
       try {
-        const body = await tryOnce(url, ms);
+        const body = await tryOnce(url, remaining());
         noteOk(url);
         if (useCache) cache.set(url, { at: Date.now(), body });
         return body;
       } catch {
         noteFail(url);
-        if (i + 1 < attempts) await sleep(250 * (i + 1));
+        if (i + 1 < attempts) await sleep(200);
       }
     }
   }
 
   if (opts.mirrors !== false) {
     for (const build of MIRRORS) {
+      if (remaining() < 1_200) break;
       const mirror = build(url);
       if (!hostHealthy(mirror)) continue;
       try {
-        const body = await tryOnce(mirror, Math.min(ms, 9_000));
+        const body = await tryOnce(mirror, remaining());
         noteOk(mirror);
         if (useCache) cache.set(url, { at: Date.now(), body });
         return body;
