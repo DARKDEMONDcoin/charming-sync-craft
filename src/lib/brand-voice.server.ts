@@ -392,7 +392,14 @@ export function analyzeStyle(text: string, taglines: string[] = []): StyleStats 
   const freq = new Map<string, number>();
   const norm = normalizeArabic(raw)
     .split(" ")
-    .filter((w) => w.length > 2 && !STOP.has(w) && !/^\d+$/.test(w));
+    .filter(
+      (w) =>
+        w.length > 2 &&
+        w.length <= 18 &&
+        !STOP.has(w) &&
+        !/\d/.test(w) &&
+        !BOILERPLATE.test(w),
+    );
   for (const w of norm) freq.set(w, (freq.get(w) ?? 0) + 1);
   const topTerms = [...freq.entries()]
     .sort((a, b) => b[1] - a[1])
