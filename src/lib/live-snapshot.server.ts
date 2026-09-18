@@ -12,7 +12,7 @@
 export type SnapshotPayload = { text: string };
 
 async function admin() {
-  const { supabaseAdmin } = await import("../integrations/supabase/client.server");
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
 }
 
@@ -27,9 +27,9 @@ export async function saveSnapshot(kind: string, key: string, text: string): Pro
         { kind, key, payload: { text } as SnapshotPayload, captured_at: new Date().toISOString() },
         { onConflict: "kind,key" },
       );
-    console.error("[snap] save", kind, key, res.error ? res.error.message : "ok");
+    if (res.error) console.error("[snapshot] save failed:", res.error.message);
   } catch (e) {
-    console.error("snapshot save failed", String(e));
+    console.error("[snapshot] save error:", String(e));
   }
 }
 
