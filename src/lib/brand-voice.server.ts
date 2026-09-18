@@ -333,10 +333,13 @@ const STOP = new Set(
 );
 
 export function analyzeStyle(text: string, taglines: string[] = []): StyleStats {
-  const raw = text.replace(/\s+/g, " ").trim();
+  // نحافظ على أسطر الفقرات لأنها حدود جُمل حقيقية في صفحات الويب العربية
+  const body = text.replace(/[ \t\u00a0]+/g, " ").trim();
+  const raw = body.replace(/\s+/g, " ").trim();
   const words = raw.split(" ").filter(Boolean);
-  const sentences = raw
-    .split(/(?<=[.!؟?…])\s+|\n+/)
+  const sentences = body
+    .split(/(?<=[.!؟?…؛])\s+|\n+/)
+    .flatMap((s) => (s.split(" ").length > 40 ? s.split(/،\s*/) : [s]))
     .map((s) => s.trim())
     .filter((s) => s.split(" ").length >= 2);
   const lens = sentences.map((s) => s.split(" ").length);
