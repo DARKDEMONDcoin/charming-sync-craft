@@ -201,6 +201,7 @@ async function liveFactsInner(
   message: string,
   budgetMs: number,
   opts: LiveOptions,
+  partial: { text: string } = { text: "" },
 ): Promise<string> {
   const q = queryOf(message);
   if (!q) return "";
