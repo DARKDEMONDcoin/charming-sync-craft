@@ -93,6 +93,8 @@ export type FetchOptions = {
   mirrors?: boolean;
   /** استخدام الذاكرة المؤقتة (افتراضياً نعم). */
   cacheable?: boolean;
+  /** تجاوز مدة الطزاجة الافتراضية المشتقة من نوع البيانات. */
+  freshMs?: number;
 };
 
 /**
@@ -104,7 +106,7 @@ export async function resilientText(url: string, opts: FetchOptions = {}): Promi
   const attempts = opts.attempts ?? 2;
   const useCache = opts.cacheable !== false;
   const hit = cache.get(url);
-  if (useCache && hit && Date.now() - hit.at < FRESH_MS) return hit.body;
+  if (useCache && hit && Date.now() - hit.at < (opts.freshMs ?? freshnessTtl(url))) return hit.body;
 
   const tryOnce = async (target: string, timeout: number) => {
     const res = await fetch(target, {
