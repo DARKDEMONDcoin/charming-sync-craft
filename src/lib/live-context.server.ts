@@ -170,16 +170,40 @@ export async function liveFactsBlock(
 ): Promise<string> {
   // سقف صارم: مهما تعثّرت المصادر أو تباطأت المرايا، الرد على المستخدم لا يتأخر.
   // ومع ذلك لا نرجع فارغين: ما وصل من أرقام رسمية قبل انتهاء المهلة يُسلَّم كما هو.
+  console.error("[snap] enter");
+  try { const m = await import("@/integrations/supabase/client.server"); console.error("[snap] admin import ok", typeof m.supabaseAdmin); } catch (e) { console.error("[snap] admin import fail", String(e)); }
   const { withBudget } = await import("./net-resilience.server");
+  const snap = await import("./live-snapshot.server").catch((e) => { console.error("[snap] import fail", String(e)); throw e; });
+  console.error("[snap] imported ok");
+  const key = snap.snapshotKey(intentOf(message) as unknown as Record<string, boolean>, {
+    country: (opts.country ?? "EG").toUpperCase(),
+    city: opts.city ?? null,
+  });
   const partial: { text: string; rows?: LiveRow[] } = { text: "", rows: [] };
   const out = await withBudget(liveFactsInner(message, budgetMs, opts, partial), budgetMs + 2_000, "");
-  if (out) return out;
-  if (partial.text) return partial.text;
+  if (out) {
+    await snap.saveSnapshot("live", key, out);
+    return out;
+  }
+  if (partial.text) {
+    await snap.saveSnapshot("live", key, partial.text);
+    return partial.text;
+  }
   // انتهت المهلة قبل الترتيب النهائي: نسلّم ما وصل فعلاً بدل الصمت — مرتّباً بالأحدث
   // ومنقّى من المكرر، مع تقديم ما له تاريخ نشر على الصفحات العامة بلا تاريخ.
   const all = partial.rows ?? [];
-  if (!all.length) return "";
   const temporal = await import("./temporal.server");
+  if (!all.length) {
+    // لا مصدر استجاب إطلاقاً: آخر لقطة محفوظة بدل الصمت، مع ذكر عمرها صراحة.
+    const last = await snap.readSnapshot("live", key);
+    if (!last) return "";
+    return [
+      "## حقائق لحظية — تعذّر الوصول للمصادر الآن",
+      `آخر معلومة معروفة محفوظة ${temporal.ageLabel(last.capturedAt)}:`,
+      last.text,
+      "قل للمستخدم صراحةً إن المصادر لم تستجب الآن، وإن هذه آخر معلومة مؤكدة وعمرها كما هو مذكور.",
+    ].join("\n");
+  }
   const seen = new Set<string>();
   const ranked = all
     .filter((r) => r.url && r.title && !seen.has(r.url) && seen.add(r.url))
@@ -187,7 +211,7 @@ export async function liveFactsBlock(
     .sort((a, b) => b.t - a.t);
   const dated = ranked.filter((x) => x.t > 0);
   const rows = (dated.length ? dated : ranked).slice(0, 8);
-  return [
+  const block = [
     "## حقائق لحظية — نتائج بحث حيّ وصلت قبل انتهاء المهلة",
     ...rows.map(
       ({ r, t }) =>
@@ -195,7 +219,8 @@ export async function liveFactsBlock(
     ),
     "اعتمد هذه النتائج كمصدر للأحداث الجارية، واذكر عمر كل خبر.",
   ].join("\n");
-
+  await snap.saveSnapshot("live", key, block);
+  return block;
 }
 
 /** المدن المذكورة صراحة في السؤال تتقدّم على مدينة العلامة (طقس/مواقيت). */
@@ -448,15 +473,32 @@ async function liveFactsInner(
 
   const facts = structured.filter(Boolean);
   const f = nowFacts(opts.timeZone ?? "Asia/Riyadh");
+  const snap = await import("./live-snapshot.server");
+  const snapKey = snap.snapshotKey(intent as unknown as Record<string, boolean>, {
+    country: code,
+    city,
+  });
 
-  if (!unique.length && !facts.length)
+  if (!unique.length && !facts.length) {
+    // الضمانة الأخيرة قبل الصمت: آخر لقطة محفوظة، معلَّمة بعمرها بوضوح.
+    const last = await snap.readSnapshot("live", snapKey);
+    if (last) {
+      const temporalMod = await import("./temporal.server");
+      return [
+        `## حقائق لحظية — تعذّر الوصول للمصادر الآن (${f.iso} ${f.clock} ${f.timeZone})`,
+        `آخر معلومة معروفة لدينا محفوظة ${temporalMod.ageLabel(last.capturedAt)}:`,
+        last.text,
+        "قل للمستخدم صراحةً إن المصادر لم تستجب الآن، وإن هذه آخر معلومة مؤكدة وعمرها كما هو مذكور. ممنوع تقديمها على أنها اللحظة الحالية.",
+      ].join("\n");
+    }
     return [
       "## حقائق لحظية",
       `بحثتَ الآن (${f.iso} ${f.clock}) عن «${q}» في عدة محركات ولم تُرجع نتائج موثوقة.`,
       "قل للمستخدم بصراحة في سطر واحد أنك بحثت ولم تجد مصدراً مؤكداً، واطلب التفصيلة (النتيجة/الاسم/التاريخ) ثم نفّذ طلبه فوراً عليها. ممنوع اختلاق نتيجة أو رقم.",
     ].join("\n");
+  }
 
-  return [
+  const block = [
     `## حقائق لحظية — بحث حيّ نُفّذ الآن (${f.iso} ${f.clock} ${f.timeZone}) عن «${q}»`,
     ...facts.map((s) => `- ${s}`),
     ...unique.map((r) => {
@@ -476,6 +518,10 @@ async function liveFactsInner(
   ]
     .filter(Boolean)
     .join("\n");
+
+  // نجاح الآن = احتياط الغد: نحفظ اللقطة بلا انتظار حتى لا تتأخر الإجابة.
+  await snap.saveSnapshot("live", snapKey, block);
+  return block;
 }
 
 /** لقطة «ما الذي يحدث الآن» لمهام الخلفية (البريفنج/الأوتوبايلوت) بلا سؤال محدد. */
@@ -497,11 +543,21 @@ export async function ambientPulse(
   const rows = (await Promise.all(tasks)).flat();
   const seen = new Set<string>();
   const unique = rows.filter((r) => r.title && !seen.has(r.title) && seen.add(r.title)).slice(0, 8);
-  if (!unique.length) return "";
+  const snap = await import("./live-snapshot.server");
+  const pulseKey = `pulse:${code.toLowerCase()}`;
+  if (!unique.length) {
+    // لا نترك مهام الخلفية بلا وعي: آخر نبض محفوظ أفضل من لا شيء، بشرط ذكر عمره.
+    const last = await snap.readSnapshot("live", pulseKey, 12 * 60 * 60 * 1000);
+    if (!last) return "";
+    const temporalMod = await import("./temporal.server");
+    return `${last.text}\n(هذه آخر لقطة محفوظة ${temporalMod.ageLabel(last.capturedAt)} — المصادر لم تستجب الآن.)`;
+  }
   const f = nowFacts(opts.timeZone ?? "Asia/Riyadh");
-  return [
+  const block = [
     `## ما يحدث الآن في السوق (${f.iso} ${f.clock})`,
     ...unique.map((r) => `- ${r.title}${r.date ? ` [${r.date}]` : ""}`),
     "استخدمها فقط إن كانت ذات صلة بالعلامة، ولا تفتعل ربطاً.",
   ].join("\n");
+  void snap.saveSnapshot("live", pulseKey, block);
+  return block;
 }
