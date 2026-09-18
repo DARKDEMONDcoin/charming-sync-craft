@@ -139,15 +139,11 @@ function metaTexts(html: string): { title: string; description: string; headings
 }
 
 function fallbackText(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<nav[\s\S]*?<\/nav>/gi, " ")
-    .replace(/<footer[\s\S]*?<\/footer>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return blockAwareText(
+    html
+      .replace(/<nav[\s\S]*?<\/nav>/gi, " ")
+      .replace(/<footer[\s\S]*?<\/footer>/gi, " "),
+  );
 }
 
 /**
