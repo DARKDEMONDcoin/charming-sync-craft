@@ -17,6 +17,25 @@ export type ReadableArticle = {
   byline: string;
 };
 
+/** يحوّل HTML إلى نص يحترم حدود الفقرات والعناصر حتى لا تلتصق الكلمات ببعضها. */
+export function blockAwareText(html: string): string {
+  if (!html) return "";
+  return html
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|h[1-6]|section|article|tr|td|th|blockquote|figcaption)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/[ \t\u00a0]+/g, " ")
+    .replace(/\n{2,}/g, "\n")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
 export function extractArticle(html: string, url: string): ReadableArticle | null {
   try {
     const { document } = parseHTML(html);
