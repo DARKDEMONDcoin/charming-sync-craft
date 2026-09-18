@@ -175,18 +175,27 @@ export async function liveFactsBlock(
   const out = await withBudget(liveFactsInner(message, budgetMs, opts, partial), budgetMs + 2_000, "");
   if (out) return out;
   if (partial.text) return partial.text;
-  // انتهت المهلة قبل الترتيب النهائي: نسلّم ما وصل فعلاً بدل الصمت.
-  const rows = (partial.rows ?? []).slice(0, 8);
-  if (!rows.length) return "";
+  // انتهت المهلة قبل الترتيب النهائي: نسلّم ما وصل فعلاً بدل الصمت — مرتّباً بالأحدث
+  // ومنقّى من المكرر، مع تقديم ما له تاريخ نشر على الصفحات العامة بلا تاريخ.
+  const all = partial.rows ?? [];
+  if (!all.length) return "";
   const temporal = await import("./temporal.server");
+  const seen = new Set<string>();
+  const ranked = all
+    .filter((r) => r.url && r.title && !seen.has(r.url) && seen.add(r.url))
+    .map((r) => ({ r, t: temporal.parseStamp(r.date) }))
+    .sort((a, b) => b.t - a.t);
+  const dated = ranked.filter((x) => x.t > 0);
+  const rows = (dated.length ? dated : ranked).slice(0, 8);
   return [
     "## حقائق لحظية — نتائج بحث حيّ وصلت قبل انتهاء المهلة",
-    ...rows.map((r) => {
-      const t = temporal.parseStamp(r.date);
-      return `- ${r.title}${r.snippet ? ` — ${r.snippet}` : ""}${t ? ` [${temporal.ageLabel(t)}]` : ""} (${r.source})`;
-    }),
+    ...rows.map(
+      ({ r, t }) =>
+        `- ${r.title}${r.snippet ? ` — ${r.snippet}` : ""} [${t ? `${temporal.ageLabel(t)} — ${temporal.freshnessTag(t)}` : "بلا تاريخ"}] (${r.source})`,
+    ),
     "اعتمد هذه النتائج كمصدر للأحداث الجارية، واذكر عمر كل خبر.",
   ].join("\n");
+
 }
 
 /** المدن المذكورة صراحة في السؤال تتقدّم على مدينة العلامة (طقس/مواقيت). */
