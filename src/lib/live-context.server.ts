@@ -173,6 +173,7 @@ export async function liveFactsBlock(
   console.error("[snap] liveFactsBlock enter");
   const { withBudget } = await import("./net-resilience.server");
   const snap = await import("./live-snapshot.server").catch((e) => { console.error("[snap] import fail", String(e)); throw e; });
+  console.error("[snap] imported ok");
   const key = snap.snapshotKey(intentOf(message) as unknown as Record<string, boolean>, {
     country: (opts.country ?? "EG").toUpperCase(),
     city: opts.city ?? null,
