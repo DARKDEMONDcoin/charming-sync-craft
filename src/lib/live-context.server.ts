@@ -82,7 +82,7 @@ function relevantRows(rows: LiveRow[], query: string): LiveRow[] {
 function intentOf(text: string) {
   return {
     news: /خبر|أخبار|اخبار|عاجل|حدث|ترند|news|انتخابات|قرار|إعلان|اعلان/u.test(text),
-    tech: /تقنية|تكنولوجيا|ذكاء اصطناعي|AI|إصدار|نسخة|تحديث|تطبيق|منصة|شركة|launch|startup/iu.test(
+    tech: /تقني|تكنولوج|ذكاء اصطناعي|AI|إصدار|نسخة|تحديث|تطبيق|منصة|شركة|هاتف|برمج|launch|startup/iu.test(
       text,
     ),
     weather: /الطقس|طقس|حرارة|مطر|جو|رطوبة|weather/u.test(text),
@@ -171,9 +171,22 @@ export async function liveFactsBlock(
   // سقف صارم: مهما تعثّرت المصادر أو تباطأت المرايا، الرد على المستخدم لا يتأخر.
   // ومع ذلك لا نرجع فارغين: ما وصل من أرقام رسمية قبل انتهاء المهلة يُسلَّم كما هو.
   const { withBudget } = await import("./net-resilience.server");
-  const partial = { text: "" };
+  const partial: { text: string; rows?: LiveRow[] } = { text: "", rows: [] };
   const out = await withBudget(liveFactsInner(message, budgetMs, opts, partial), budgetMs + 2_000, "");
-  return out || partial.text;
+  if (out) return out;
+  if (partial.text) return partial.text;
+  // انتهت المهلة قبل الترتيب النهائي: نسلّم ما وصل فعلاً بدل الصمت.
+  const rows = (partial.rows ?? []).slice(0, 8);
+  if (!rows.length) return "";
+  const temporal = await import("./temporal.server");
+  return [
+    "## حقائق لحظية — نتائج بحث حيّ وصلت قبل انتهاء المهلة",
+    ...rows.map((r) => {
+      const t = temporal.parseStamp(r.date);
+      return `- ${r.title}${r.snippet ? ` — ${r.snippet}` : ""}${t ? ` [${temporal.ageLabel(t)}]` : ""} (${r.source})`;
+    }),
+    "اعتمد هذه النتائج كمصدر للأحداث الجارية، واذكر عمر كل خبر.",
+  ].join("\n");
 }
 
 /** المدن المذكورة صراحة في السؤال تتقدّم على مدينة العلامة (طقس/مواقيت). */
@@ -201,7 +214,7 @@ async function liveFactsInner(
   message: string,
   budgetMs: number,
   opts: LiveOptions,
-  partial: { text: string } = { text: "" },
+  partial: { text: string; rows?: LiveRow[] } = { text: "" },
 ): Promise<string> {
   const q = queryOf(message);
   if (!q) return "";
@@ -232,7 +245,35 @@ async function liveFactsInner(
       settled(sources.googleNewsSearch(q, { country: code, ms: searchMs }), []),
       settled(sources.gdeltNews(q, { ms: searchMs }), []),
     );
-  if (intent.tech) webTasks.push(settled(sources.hackerNewsSearch(q, { ms: searchMs }), []));
+  if (intent.tech) {
+    webTasks.push(settled(sources.hackerNewsSearch(q, { ms: searchMs }), []));
+    webTasks.push(
+      settled(
+        (async () => (await import("./live-sources-world.server")).lobsters({ ms: searchMs }))(),
+        [],
+      ),
+    );
+  }
+  // نبض اجتماعي + محرك بديل: يغطّيان الحالات التي تصمت فيها المحركات التقليدية.
+  webTasks.push(
+    settled(
+      (async () => {
+        const world = await import("./live-sources-world.server");
+        return world.libreySearch(q, { ms: searchMs });
+      })(),
+      [],
+    ),
+  );
+  if (intent.tech)
+    webTasks.push(
+      settled(
+        (async () => {
+          const world = await import("./live-sources-world.server");
+          return world.mastodonTag(q.split(/\s+/)[0] ?? "", { ms: Math.min(searchMs, 5_000) });
+        })(),
+        [],
+      ),
+    );
   // بدائل دائمة تعمل بالتوازي: لو حُجب محرك أو سقط مزوّد يبقى هناك من يجيب.
   webTasks.push(
     settled(
@@ -243,6 +284,34 @@ async function liveFactsInner(
       [],
     ),
   );
+
+  // 1-ب) سؤال عام عن «آخر الأخبار» بلا كيان محدد: البحث بالكلمات يعطي صفحات أقسام
+  //      لا أخباراً. الصحيح هنا عناوين الرئيسية اللحظية من الخلاصات مباشرة.
+  const generic = !norm(q)
+    .split(/[^\p{L}\p{N}]+/u)
+    .some(
+      (t) =>
+        t.length >= 3 &&
+        !STOP.has(t) &&
+        !/خبر|اخبار|تقني|تقنيه|تكنولوجيا|ساعه|ساعة|24|عالم|مهم|اهم|حصل|جديد|news|tech/u.test(t),
+    );
+  if (generic && (intent.news || intent.tech)) {
+    webTasks.push(
+      settled(sources.googleNewsTop({ country: code, ms: searchMs }), []),
+      settled(
+        (async () => (await import("./live-sources-extra.server")).arabicFeeds({ ms: searchMs }))(),
+        [],
+      ),
+    );
+    if (intent.tech)
+      webTasks.push(
+        settled(sources.hackerNewsSearch("AI OR startup OR launch", { ms: searchMs }), []),
+        settled(
+          (async () => (await import("./live-sources-world.server")).lobsters({ ms: searchMs }))(),
+          [],
+        ),
+      );
+  }
 
   // 2) مصادر منظّمة حسب النيّة — إجابات قاطعة بأرقام حقيقية.
   const structuredTasks: Promise<string>[] = [];
@@ -261,10 +330,19 @@ async function liveFactsInner(
   if (intent.crypto) structuredTasks.push(settled(extra.cryptoAny(undefined, { ms: searchMs }), ""));
   if (intent.prayer)
     structuredTasks.push(settled(extra.prayerAny(city, place.country, { ms: searchMs }), ""));
+  const world = await import("./live-sources-world.server");
   if (intent.sports) {
     const team = teamNameIn(message);
     if (team) structuredTasks.push(settled(sources.teamMatches(team, { ms: searchMs }), ""));
+    structuredTasks.push(settled(world.espnScores(undefined, { ms: searchMs }), ""));
   }
+  // إجازات ومناسبات رسمية: تفيد كل موظف في التوقيت والحملات.
+  if (/إجازة|أجازة|عطلة|عيد|مناسبة|holiday|يوم وطني/u.test(message))
+    structuredTasks.push(settled(world.publicHolidays(code, { ms: searchMs }), ""));
+  if (/زلزال|زلازل|هزة|earthquake/u.test(message))
+    structuredTasks.push(settled(world.earthquakes({ ms: searchMs }), ""));
+  if (/من هو|من هي|ما هي|تعريف|شركة|مؤسس|رئيس|who is/u.test(message))
+    structuredTasks.push(settled(world.wikidataFact(q, { ms: searchMs }), ""));
 
   // الأرقام الرسمية تصل عادة قبل نتائج البحث: نسجّلها فوراً كنسخة احتياطية جاهزة.
   const structuredP = Promise.all(structuredTasks).then((list) => {
@@ -279,9 +357,19 @@ async function liveFactsInner(
     }
     return list;
   });
-  const [webResults, structured] = await Promise.all([Promise.all(webTasks), structuredP]);
+  // كل ما يصل من نتائج يُسجَّل فوراً: لو انتهت المهلة قبل اكتمال الكل نسلّم ما وصل.
+  const bag: LiveRow[] = (partial.rows ??= []);
+  const tracked = webTasks.map((p) =>
+    p.then((rows) => {
+      for (const r of rows) if (r?.url && r?.title) bag.push(r);
+      return rows;
+    }),
+  );
+  const [webResults, structured] = await Promise.all([Promise.all(tracked), structuredP]);
 
-  let rows = webResults.flatMap((r) => relevantRows(r, q).slice(0, 6));
+  let rows = generic
+    ? webResults.flatMap((r) => r.slice(0, 6))
+    : webResults.flatMap((r) => relevantRows(r, q).slice(0, 6));
   // لو أسقطت التصفية كل شيء، نأخذ أفضل ما جاءت به مصادر الأخبار الخام (الأحدث زمنياً).
   if (!rows.length) rows = webResults.flatMap((r) => r.filter((x) => x.date).slice(0, 4));
   const seen = new Set<string>();
@@ -292,6 +380,25 @@ async function liveFactsInner(
   const temporal = await import("./temporal.server");
   const halfLife = temporal.halfLifeFor(message);
   const stamp = (r: LiveRow) => temporal.parseStamp(r.date);
+  const wantsFresh =
+    intent.news ||
+    /اليوم|النهارده|النهاردة|الآن|الان|دلوقتي|عاجل|آخر|اخر|أحدث|احدث|أمس|امبارح|٢٤ ساعة|24 ساعة/u.test(
+      message,
+    );
+  if (wantsFresh) {
+    // سؤال عن «الآن» لا يُجاب بخبر عمره شهور: نُسقط القديم صراحةً.
+    const cutoff = Date.now() - 14 * 86_400_000;
+    const fresh = unique.filter((r) => stamp(r) >= cutoff);
+    const undated = unique.filter((r) => stamp(r) === 0).slice(0, 3);
+    if (fresh.length) unique = [...fresh, ...undated];
+  }
+  const TECH_HOST =
+    /arstechnica|techcrunch|theverge|engadget|ycombinator|lobste|wired|zdnet|aitnews|tech|ghacks|9to5|android|apple/i;
+  if (intent.tech) {
+    // سؤال تقني لا يُجاب بعناوين سياسية: نُقدّم مصادر التقنية إن وُجدت.
+    const techRows = unique.filter((r) => TECH_HOST.test(r.url) || TECH_HOST.test(r.source));
+    if (techRows.length >= 3) unique = techRows;
+  }
   unique = unique
     .map((r) => ({ r, score: temporal.decayScore(stamp(r), halfLife) }))
     .sort((a, b) => b.score - a.score)
