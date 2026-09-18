@@ -169,8 +169,11 @@ export async function liveFactsBlock(
   opts: LiveOptions = {},
 ): Promise<string> {
   // سقف صارم: مهما تعثّرت المصادر أو تباطأت المرايا، الرد على المستخدم لا يتأخر.
+  // ومع ذلك لا نرجع فارغين: ما وصل من أرقام رسمية قبل انتهاء المهلة يُسلَّم كما هو.
   const { withBudget } = await import("./net-resilience.server");
-  return withBudget(liveFactsInner(message, budgetMs, opts), budgetMs + 2_000, "");
+  const partial = { text: "" };
+  const out = await withBudget(liveFactsInner(message, budgetMs, opts, partial), budgetMs + 2_000, "");
+  return out || partial.text;
 }
 
 /** المدن المذكورة صراحة في السؤال تتقدّم على مدينة العلامة (طقس/مواقيت). */
