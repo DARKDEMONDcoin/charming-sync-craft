@@ -438,7 +438,7 @@ export async function runEmployeeTurn(
           }).catch(() => "")
         : Promise.resolve(""),
     ]);
-    console.log("[liveblock]", liveBlock.slice(0, 400).replace(/\n/g, " | "));
+    emit({ type: "step", label: `DBG ${liveBlock.slice(0, 500).replace(/\n/g, " | ")}` });
 
     // المنصة التي سمّاها المستخدم بنفسه — تُحترم حرفياً ولا تُبدَّل بغيرها.
     const { requestedPublishTargets, providerLabel } = await import("./platforms");
